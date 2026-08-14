@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "policy": "content-locked",
+  "created_at": "2026-08-14T20:06:16Z",
+  "approved_by": "human",
+  "content_sha256": "865734f491371401ab2d79b3d8dc04e0211578d48792dc915d6c625af83882a5",
+  "token_sha256": "52789fd21dcd022c13fde19eb35303264e954be2e4e447b0a4dafacc8dc55427",
+  "history": [
+    {"action": "init", "at": "2026-08-14T20:06:16Z", "reason": "initial plan approval"}
+  ]
+}

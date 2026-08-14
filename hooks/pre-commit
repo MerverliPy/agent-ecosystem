@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Pre-commit guard: PHASES.md / PLAN.lock content changes require the human approval token.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+exec bash "$ROOT/scripts/plan-lock.sh" check-staged
