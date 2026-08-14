@@ -172,9 +172,9 @@ cmd_approve() {
 cmd_hash_stdin() {
   local tmp
   tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' EXIT
   cat > "$tmp"
   content_hash "$tmp"
+  rm -f "$tmp"
 }
 
 cmd_check_staged() {
