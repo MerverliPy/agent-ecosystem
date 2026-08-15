@@ -94,3 +94,8 @@
 - Proposed: 2026-08-14T21:38:28Z
 - Reason: DeskAgent v2 amendment (approved in review): reframe DeskAgent as a personal agent with self-memory — companion + project memory scopes, local-first storage with per-session opt-in cloud reflection, every memory write gated by an approval card. Split Phase 5 into Phase 5 (self-memory core) + Phase 6 (runtime/skills/sandbox); renumber old Phase 6 (synergies) to Phase 7; add locked constraint DEC-0009; update Definition of Done. BenchKit, SkillHub, SlopGate scope unchanged.
 - Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "DeskAgent v2 amendment (approved in review): reframe DeskAgent as a personal agent with self-memory — companion + project memory scopes, local-first storage with per-session opt-in cloud reflection, every memory write gated by an approval card. Split Phase 5 into Phase 5 (self-memory core) + Phase 6 (runtime/skills/sandbox); renumber old Phase 6 (synergies) to Phase 7; add locked constraint DEC-0009; update Definition of Done. BenchKit, SkillHub, SlopGate scope unchanged."'.
+
+## CHANGE REQUEST <!-- REQUEST_OPEN -->
+- Proposed: 2026-08-15T01:16:08Z
+- Reason: Update PHASES.md META repository field: repo is now live at MerverliPy/agent-ecosystem (was 'local, unregistered remote'). Cosmetic metadata only, no scope change.
+- Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "Update PHASES.md META repository field: repo is now live at MerverliPy/agent-ecosystem (was 'local, unregistered remote'). Cosmetic metadata only, no scope change."'.

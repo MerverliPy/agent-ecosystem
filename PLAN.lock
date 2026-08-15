@@ -3,7 +3,7 @@
   "policy": "content-locked",
   "created_at": "2026-08-14T20:06:16Z",
   "approved_by": "human",
-  "content_sha256": "ad23c2aa8276e6dbfe288cc4cb1b697fbf5b1b1d142d595d7beea9184ed25dd3",
+  "content_sha256": "040ca8142ae92caec7d7df09c7ba1886a3ea5c72bd058d8f3e9aceaac68fbe12",
   "token_sha256": "52789fd21dcd022c13fde19eb35303264e954be2e4e447b0a4dafacc8dc55427",
   "history": [
     {
@@ -15,6 +15,11 @@
       "action": "approve",
       "at": "2026-08-14T22:19:00Z",
       "reason": "DeskAgent v2 self-memory amendment\n (DEC-0009, Phase 5+6 split, DoD update)"
+    },
+    {
+      "action": "approve",
+      "at": "2026-08-15T01:16:59Z",
+      "reason": "META repo field update"
     }
   ]
 }

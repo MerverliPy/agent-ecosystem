@@ -2,7 +2,7 @@
 
 <!-- META
 created: 2026-08-14
-repository: agent-ecosystem (local, unregistered remote)
+repository: MerverliPy/agent-ecosystem
 branch: main
 generated_from:
   - Research: GitHub trending (2026-08-14) — agent harnesses, skills, local inference, AI code quality
