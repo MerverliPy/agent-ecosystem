@@ -12,18 +12,77 @@
 
 ## Phase 1: Recon, scaffold, and lock activation
 
-**Phase status:** IN_PROGRESS
+**Phase status:** COMPLETE (2026-08-14)
 **Started:** 2026-08-14
 **Notes:**
-- Plan approved by human on 2026-08-14; lock initialized (see PLAN.lock history).
-- Env verified: jq, sha256sum, openssl, git present.
-- Remaining: toolchain versions (rustc/cargo/node), skeleton dirs, verify-env.sh, AGENTS.md/README/PROGRESS already seeded by bootstrap, hooks install confirmation, draft schemas/specs, lock verify.
+- Plan approved by human 2026-08-14; lock initialized via `plan-lock.sh init` (baseline 865734f…), re-locked after the DeskAgent v2 amendment (ad23c2aa…, commit dca7718).
+- Env verified: git 2.43.0, jq 1.7, OpenSSL 3.0.13, node v22.22.3, npm 12.0.1, cargo/rustc 1.96.0. `tauri` not found — warn only (optional until Phase 5).
+- `verify-env.sh` fixed during execution (openssl now runs `openssl version`).
+- Skeleton: `apps/README.md` (8 product dirs), `shared/README.md`, `shared/datasets/README.md` (DEC-0001 layout).
+- Drafts created: `shared/schemas/benchmark-result.schema.json` v1, `shared/specs/skill-manifest-spec-v1.md` (open questions recorded for Phase 3).
+- Hooks installed and enforcement proven live (2026-08-14): content change without token BLOCKED; wrong token BLOCKED; valid token ALLOWED; `approve` without TTY refused; status-only edits pass without token.
+- Task "Lock the plan" completed via `init` (the `lock` subcommand in the plan maps to `init` in the script).
+- **Guardrail incident (self-caught):** during Phase 1 execution an agent edit added a `(Note: ...)` parenthetical to a locked task line — `verify` flagged CONTENT DRIFT, the note was reverted, verify passed again. Lesson recorded: status/checkbox updates only, ever; explanatory notes belong in PROGRESS.md, never in PHASES.md.
 
-### Task done: <task text>
-- FILES CHANGED: <paths + insertions/deletions>
-- VALIDATIONS RUN: <commands + exit codes>
-- EXIT CODES: <map>
-- Lock verify: PASS/FAIL
+### Task done: Verify environment
+- FILES CHANGED: none (recorded in this file)
+- VALIDATIONS RUN: `bash scripts/verify-env.sh` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Monorepo skeleton
+- FILES CHANGED: apps/README.md +1, shared/README.md +1, shared/datasets/README.md +1
+- VALIDATIONS RUN: `git status --short`
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: verify-env.sh
+- FILES CHANGED: scripts/verify-env.sh (openssl version flag)
+- VALIDATIONS RUN: `bash scripts/verify-env.sh` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: AGENTS.md constitution
+- FILES CHANGED: AGENTS.md (bootstrap, 2026-08-14)
+- VALIDATIONS RUN: n/a (doc)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: README.md
+- FILES CHANGED: README.md (bootstrap, 2026-08-14)
+- VALIDATIONS RUN: n/a (doc)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: PROGRESS.md seeded
+- FILES CHANGED: PROGRESS.md (bootstrap + this record)
+- VALIDATIONS RUN: n/a (doc)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Install git hooks + confirm blocking
+- FILES CHANGED: hooks/ (bootstrap); .git/hooks/pre-commit, pre-push installed
+- VALIDATIONS RUN: drift test (content edit w/o token blocked; wrong token blocked; valid token allowed)
+- EXIT CODES: 0/1 as designed
+- Lock verify: PASS
+
+### Task done: benchmark-result.schema.json (draft v1)
+- FILES CHANGED: shared/schemas/benchmark-result.schema.json +1
+- VALIDATIONS RUN: `jq empty shared/schemas/benchmark-result.schema.json`
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: skill-manifest-spec-v1.md (draft)
+- FILES CHANGED: shared/specs/skill-manifest-spec-v1.md +1
+- VALIDATIONS RUN: n/a (doc)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Lock the plan
+- FILES CHANGED: PLAN.lock (via `plan-lock.sh init` at bootstrap; re-locked at amendment dca7718)
+- VALIDATIONS RUN: `bash scripts/plan-lock.sh verify` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
 
 ---
 

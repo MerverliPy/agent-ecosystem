@@ -7,22 +7,22 @@ check() {
   local name="$1"; shift
   if command -v "$1" >/dev/null 2>&1; then
     printf 'ok     %-12s ' "$name"
-    "$@" --version 2>&1 | head -n1
+    "$@" 2>&1 | head -n1
   else
     printf 'MISSING %-12s %s\n' "$name" "$1"
     missing=1
   fi
 }
 
-check git git
-check jq jq
-check openssl openssl
-check node node
-check npm npm
-check cargo cargo
-check rustc rustc
+check git git --version
+check jq jq --version
+check openssl openssl version
+check node node --version
+check npm npm --version
+check cargo cargo --version
+check rustc rustc --version
 
-# Desktop app toolchain (Phase 5) — warn only, not fatal for early phases.
+# Desktop app toolchain (Phase 5/6) — warn only, not fatal for early phases.
 for t in rustup tauri; do
   command -v "$t" >/dev/null 2>&1 || echo "warn   (optional until Phase 5): $t not found"
 done

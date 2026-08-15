@@ -50,18 +50,18 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 
 ---
 
-## Phase 1: Recon, scaffold, and lock activation <!-- PENDING -->
+## Phase 1: Recon, scaffold, and lock activation <!-- COMPLETE -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && bash scripts/verify-env.sh -->
-- [ ] Verify environment: rustc/cargo, node ≥ 20, npm, git; record versions in `PROGRESS.md`.
-- [ ] Create monorepo skeleton: `apps/`, `shared/`, `scripts/` with placeholder READMEs per DEC-0001.
-- [ ] Create `scripts/verify-env.sh` that checks required toolchains and exits non-zero with a clear message on failure.
-- [ ] Create `AGENTS.md` constitution (lock policy, guardrails, pre/post-task templates).
-- [ ] Create `README.md` with ecosystem overview and links to the four products.
-- [ ] Create `PROGRESS.md` and seed with Phase 1 entries.
-- [ ] Install git hooks (`hooks/install-hooks.sh` → pre-commit + pre-push) and confirm they block a deliberate PHASES.md edit without token.
-- [ ] Create `shared/schemas/benchmark-result.schema.json` (draft v1: model, hardware, runtime, quant, tokens_per_sec, peak_ram_gb, disk_size_gb, quality_delta, source_url, submitted_at).
-- [ ] Create `shared/specs/skill-manifest-spec-v1.md` (draft: name, version, harnesses[], dependencies[], permissions[], repo, license).
-- [ ] Lock the plan: run `scripts/plan-lock.sh lock` (records baseline hash). Confirm `verify` passes.
+- [x] Verify environment: rustc/cargo, node ≥ 20, npm, git; record versions in `PROGRESS.md`.
+- [x] Create monorepo skeleton: `apps/`, `shared/`, `scripts/` with placeholder READMEs per DEC-0001.
+- [x] Create `scripts/verify-env.sh` that checks required toolchains and exits non-zero with a clear message on failure.
+- [x] Create `AGENTS.md` constitution (lock policy, guardrails, pre/post-task templates).
+- [x] Create `README.md` with ecosystem overview and links to the four products.
+- [x] Create `PROGRESS.md` and seed with Phase 1 entries.
+- [x] Install git hooks (`hooks/install-hooks.sh` → pre-commit + pre-push) and confirm they block a deliberate PHASES.md edit without token.
+- [x] Create `shared/schemas/benchmark-result.schema.json` (draft v1: model, hardware, runtime, quant, tokens_per_sec, peak_ram_gb, disk_size_gb, quality_delta, source_url, submitted_at).
+- [x] Create `shared/specs/skill-manifest-spec-v1.md` (draft: name, version, harnesses[], dependencies[], permissions[], repo, license).
+- [x] Lock the plan: run `scripts/plan-lock.sh lock` (records baseline hash). Confirm `verify` passes.
 - **Exit criteria:** repo green; hooks enforce; both draft schemas/specs exist; lock active.
 
 ## Phase 2: BenchKit — benchmark data, calculator, and site <!-- PENDING --> <!-- DEPENDS_ON: Phase 1 -->
