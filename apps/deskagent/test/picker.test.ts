@@ -5,7 +5,9 @@ import { BENCHKIT_CATALOG } from "../src/lib/benchkit-catalog.ts";
 import {
   defaultMachine,
   evaluateRows,
+  loadLiveCatalog,
   pickForMachine,
+  resetLiveCache,
   verdictLabel,
 } from "../src/lib/picker.ts";
 
@@ -57,4 +59,46 @@ test("defaultMachine is a sane 16GB profile", () => {
   assert.equal(m.ramGb, 16);
   assert.ok(m.memBandwidthGbPerSec! > 0);
   assert.equal(m.streamingSupported, true);
+});
+
+// ---- live BenchKit fetch with cached fallback (Phase 7 Task 2) -----------------
+
+const SAMPLE_JSONL = [
+  JSON.stringify({
+    model: "live-model",
+    runtime: "ollama",
+    source_url: "https://example.com/x",
+    hardware: { cpu: "M3", ram_gb: 64, os: "macos" },
+    tokens_per_sec: 12.5,
+    peak_ram_gb: 8.1,
+  }),
+  "{not json",
+  JSON.stringify({ model: "missing-fields" }),
+].join("\n");
+
+const okFetch = (async () => ({
+  ok: true,
+  status: 200,
+  async text() {
+    return SAMPLE_JSONL;
+  },
+})) as unknown as typeof fetch;
+
+const failFetch = (async () =>
+  ({ ok: false, status: 503, async text() { return ""; } })) as unknown as typeof fetch;
+
+test("loadLiveCatalog uses live rows when the fetch succeeds", async () => {
+  const { rows, source, error } = await loadLiveCatalog(okFetch);
+  if (source !== "live") console.error("DBG live fetch failed:", error);
+  assert.equal(source, "live");
+  assert.ok(rows.some((r) => r.model === "live-model"));
+  assert.equal(rows.some((r) => r.model === "missing-fields"), false, "bad rows dropped");
+});
+
+test("loadLiveCatalog falls back to the bundled catalog on failure", async () => {
+  resetLiveCache();
+  const { rows, source, error } = await loadLiveCatalog(failFetch);
+  assert.equal(source, "bundled");
+  assert.ok(error, "error surfaced");
+  assert.equal(rows, BENCHKIT_CATALOG);
 });

@@ -17,6 +17,8 @@ export interface SkillPackage {
   high_risk: boolean;
   downloads: number;
   versions: SkillVersion[];
+  /** SlopGate quality score 0-100 (higher = worse); present when the snapshot ran the scanner. */
+  quality_score?: number;
 }
 
 export interface Snapshot {

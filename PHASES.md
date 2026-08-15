@@ -119,15 +119,15 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Add voice input path (Whisper/WebRTC stub acceptable at P0) and a scheduled-tasks placeholder.
 - **Exit criteria:** app chats with a local model; picker reflects BenchKit data; agent recalls facts/preferences across sessions with citations; skills install and invoke; risky actions and memory writes blocked until approved; undo log records actions.
 
-## Phase 7: Synergies, validation, and launch <!-- PENDING --> <!-- DEPENDS_ON: Phase 6 -->
+## Phase 7: Synergies, validation, and launch <!-- IN_PROGRESS --> <!-- DEPENDS_ON: Phase 6 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && bash scripts/run-all-checks.sh && bash scripts/plan-lock.sh status -->
-- [ ] Create `scripts/run-all-checks.sh`: runs every product's test suite, lints, and schema/dataset validation; single exit code.
-- [ ] Wire BenchKit API into DeskAgent model picker (live fetch with cached fallback).
-- [ ] Wire SlopGate scanner into SkillHub `verify` as an optional quality check; add quality score to skill pages.
-- [ ] Add cross-links and "ecosystem" landing section in each product's README.
-- [ ] Write demo scripts: BenchKit dataset + calculator demo; SkillHub install-from-registry demo; SlopGate PR-gate demo; DeskAgent skill-install + approval demo.
-- [ ] Full validation pass: run `run-all-checks.sh`, fix all failures, re-run.
-- [ ] Write final handoff: `records/final-handoff.md` with completion state, validations run, residual risks, and next actions for each product.
+- [x] Create `scripts/run-all-checks.sh`: runs every product's test suite, lints, and schema/dataset validation; single exit code.
+- [x] Wire BenchKit API into DeskAgent model picker (live fetch with cached fallback).
+- [x] Wire SlopGate scanner into SkillHub `verify` as an optional quality check; add quality score to skill pages.
+- [x] Add cross-links and "ecosystem" landing section in each product's README.
+- [x] Write demo scripts: BenchKit dataset + calculator demo; SkillHub install-from-registry demo; SlopGate PR-gate demo; DeskAgent skill-install + approval demo.
+- [x] Full validation pass: run `run-all-checks.sh`, fix all failures, re-run.
+- [x] Write final handoff: `records/final-handoff.md` with completion state, validations run, residual risks, and next actions for each product.
 - **Exit criteria:** all checks green on a clean clone (`git clone` → `run-all-checks.sh`); four demos runnable from README; handoff written; milestone acceptance claimed.
 
 ---

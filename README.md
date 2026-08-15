@@ -49,3 +49,26 @@ records/         per-phase handoff records
 ```
 
 See `PHASES.md` for the full plan and locked constraints.
+
+## Status
+
+All seven phases are **COMPLETE** (Milestone 1 accepted). Every product is built,
+validated, and cross-wired:
+
+- BenchKit data + `will-it-run` feed **DeskAgent's** model picker (live fetch, bundled offline fallback).
+- **SkillHub** registry + lockfile format feed **DeskAgent's** in-app skill installer (skills surface as procedural memory).
+- **SlopGate** scanner feeds **SkillHub's** optional `verify --quality` check (quality score on skill pages).
+- Approval cards + shared undo log gate every DeskAgent memory write and risky action (DEC-0009).
+- DeskAgent chats with a real local model (Ollama/llama.cpp adapters; live-verified).
+
+## Demos
+
+```bash
+bash scripts/run-all-checks.sh        # 19 checks, single exit code — the CI surrogate
+node scripts/demos/benchkit-demo.mjs                # dataset + calculator
+bash scripts/demos/skillhub-install-demo.sh         # publish → install → verify --quality
+bash scripts/demos/slopgate-gate-demo.sh            # fixture scores + CI gate
+bash scripts/demos/deskagent-approval-demo.sh       # capture → approve → sandbox → citations
+```
+
+See `scripts/demos/README.md` for details.

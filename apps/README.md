@@ -11,4 +11,17 @@
 | `slopgate-dash/` | SlopGate — trend dashboard | 4 |
 | `deskagent/` | DeskAgent — Tauri 2 + React personal agent | 5–6 |
 
-Placeholder until each product's phase begins.
+## Ecosystem
+
+The four products build on each other (see the root README for the full story):
+
+- **BenchKit** (`bench-site/`) — local-inference benchmark data + the `will-it-run`
+  calculator (`shared/lib/will-it-run.mjs`). **Consumed by** DeskAgent's model picker.
+- **SkillHub** (`skillhub-cli/`, `skillhub-registry/`, `skillhub-web/`) — the skill
+  marketplace. **Consumed by** DeskAgent's in-app skill installer.
+- **SlopGate** (`slopgate/`, `slopgate-action/`, `slopgate-dash/`) — AI-slop
+  detection. **Consumed by** SkillHub's optional quality check.
+- **DeskAgent** (`deskagent/`) — the personal agent that pulls it together: BenchKit
+  data for model choice, SkillHub for skills, approval cards for every memory write.
+
+Shared assets live in `../shared/` (specs, schemas, datasets, `will-it-run.mjs`).

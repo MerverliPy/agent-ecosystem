@@ -23,7 +23,14 @@ export default async function SkillPage({ params }: { params: Promise<{ owner: s
       <a className="back" href="/">← back to registry</a>
       <h1>{pkg.name}</h1>
       <p className="sub">{pkg.description}</p>
-      <p><Badges pkg={pkg} /></p>
+      <p><Badges pkg={pkg} />{" "}{pkg.quality_score != null && (
+        <span className={`q-badge ${pkg.quality_score >= 50 ? "q-bad" : pkg.quality_score >= 25 ? "q-warn" : "q-good"}`}>
+          quality {pkg.quality_score}/100
+        </span>
+      )}</p>
+      {pkg.quality_score != null && (
+        <p className="note">Quality score from the SlopGate scanner (higher = worse); security verification is separate.</p>
+      )}
 
       <div className="panel">
         <h2>Install</h2>
@@ -38,6 +45,7 @@ export default async function SkillPage({ params }: { params: Promise<{ owner: s
         <p>License: <code>{pkg.license}</code></p>
         <p>Repository: <a href={pkg.repo} target="_blank" rel="noreferrer">{pkg.repo}</a></p>
         <p>Installs: {fmt(pkg.downloads)}</p>
+        <p>SlopGate quality: {pkg.quality_score != null ? `${pkg.quality_score}/100` : "not scanned"}</p>
         <p>Latest version: <code>{latest?.version ?? "—"}</code> (published {latest?.published_at ?? "—"})</p>
       </div>
 

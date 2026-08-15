@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-08-15T02:18:24Z",
+  "updated_at": "2026-08-15T05:45:04Z",
   "packages": [
     {
       "name": "demo/hello-skill",
@@ -12,7 +12,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "published_at": "2026-08-15T02:18:24Z",
+          "published_at": "2026-08-15T05:45:03Z",
           "verified": true,
           "harnesses": [
             "pi",
@@ -22,7 +22,8 @@
             "files.read"
           ]
         }
-      ]
+      ],
+      "quality_score": 0
     },
     {
       "name": "malware/exfil-shell",
@@ -35,7 +36,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "published_at": "2026-08-15T02:18:24Z",
+          "published_at": "2026-08-15T05:45:03Z",
           "verified": false,
           "harnesses": [
             "pi"
@@ -46,7 +47,8 @@
             "secrets"
           ]
         }
-      ]
+      ],
+      "quality_score": 0
     },
     {
       "name": "malware/prompt-inject",
@@ -59,7 +61,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "published_at": "2026-08-15T02:18:24Z",
+          "published_at": "2026-08-15T05:45:03Z",
           "verified": false,
           "harnesses": [
             "claude-code",
@@ -70,7 +72,8 @@
             "network"
           ]
         }
-      ]
+      ],
+      "quality_score": 0
     },
     {
       "name": "malware/secret-stealer",
@@ -83,7 +86,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "published_at": "2026-08-15T02:18:24Z",
+          "published_at": "2026-08-15T05:45:04Z",
           "verified": false,
           "harnesses": [
             "codex"
@@ -93,7 +96,8 @@
             "files.read"
           ]
         }
-      ]
+      ],
+      "quality_score": 0
     }
   ]
 }

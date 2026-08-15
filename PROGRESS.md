@@ -405,3 +405,56 @@
 - VALIDATE hook: `bash scripts/plan-lock.sh verify` exit 0 · `npm test` exit 0 (18/18) · `cargo check` exit 0
 - Exit criteria met: app chats with a local model (live Ollama smoke); picker reflects BenchKit data; recall with citations across sessions; skills install (registry + local) surfacing as procedural memory; risky actions + memory writes blocked until approved; undo log records actions
 - Handoff: `records/phase-6-handoff.md` — 6/6 tasks, no blocked gates
+
+## Phase 7: Synergies, validation, and launch
+
+**Phase status:** COMPLETE (2026-08-15)
+**Notes:**
+- `scripts/run-all-checks.sh`: 19 checks across shared (schema/dataset/calculator), slopgate (+typecheck), slopgate-action, slopgate-dash, bench-site, skillhub (cli/registry/web), deskagent (frontend tests, cargo test, cargo check, build). Single exit code; first full run green, one fix later (test-fake cast precedence in picker tests).
+- BenchKit live fetch wired into the DeskAgent picker (`loadLiveCatalog`): raw benchmarks.jsonl with tolerant parsing, per-row shape validation, in-memory cache, and bundled-catalog fallback (DEC-0005); 2 new tests (live + fallback).
+- SlopGate → SkillHub: `verify --quality` runs the slop scanner (node, `SKILLHUB_SLOPGATE_CLI` or repo checkout) and prints the quality score; e2e injects real quality scores into the web snapshot (verified benign 0/100); skill pages render a quality badge + explain security verification is separate. e2e now 14/14.
+- Cross-links: ecosystem sections added to apps/README.md (product map + consumption graph), bench-site/README.md, skillhub-cli/README.md, slopgate/README.md, deskagent/README.md; root README gained Status + Demos.
+- Demos: benchkit-demo.mjs, skillhub-install-demo.sh, slopgate-gate-demo.sh, deskagent-approval-demo.sh + scripts/demos/README.md — all four run offline; verified live.
+- Fresh-clone validation: `git clone` → `npm install` (per product) → `run-all-checks.sh` 19/19 green (DoD).
+- VALIDATE hook: `bash scripts/plan-lock.sh verify` exit 0 · `bash scripts/run-all-checks.sh` exit 0 · `bash scripts/plan-lock.sh status` exit 0.
+
+### Task done: run-all-checks.sh
+- FILES CHANGED: scripts/run-all-checks.sh (new, executable)
+- VALIDATIONS RUN: `bash scripts/run-all-checks.sh` exit 0 (19/19, twice)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: BenchKit live fetch into the DeskAgent picker
+- FILES CHANGED: apps/deskagent/src/lib/picker.ts (loadLiveCatalog/resetLiveCache), test/picker.test.ts (+2 tests)
+- VALIDATIONS RUN: `npm test --prefix apps/deskagent` 20/20; `npm run build` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: SlopGate into SkillHub verify + quality on skill pages
+- FILES CHANGED: apps/skillhub-cli/src/main.rs (Verify --quality, run_quality_check), scripts/e2e.sh (quality injection step), scripts/inject-quality.mjs, apps/skillhub-web/{lib/types.ts (quality_score), app/skills/[owner]/[name]/page.tsx (badge), app/globals.css (q-badge), data/skills.json}
+- VALIDATIONS RUN: `bash apps/skillhub-cli/scripts/e2e.sh` 14/14; `npm run build --prefix apps/skillhub-web` exit 0 (badge verified in rendered HTML); `skillhub verify --quality` on fixtures
+- EXIT CODES: 0 (and 1 as designed for malicious fixtures)
+- Lock verify: PASS
+
+### Task done: ecosystem cross-links + READMEs
+- FILES CHANGED: apps/README.md (ecosystem map), apps/bench-site/README.md (new), apps/skillhub-cli/README.md (new), apps/slopgate/README.md, apps/deskagent/README.md, README.md (Status + Demos)
+- VALIDATIONS RUN: n/a (docs)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: demo scripts
+- FILES CHANGED: scripts/demos/{benchkit-demo.mjs, skillhub-install-demo.sh, slopgate-gate-demo.sh, deskagent-approval-demo.sh, README.md}
+- VALIDATIONS RUN: all four demos executed successfully (BenchKit rows + verdicts; SkillHub publish→install→verify --quality; SlopGate scores + gate exit codes; DeskAgent 5 core test flows)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: full validation pass
+- VALIDATIONS RUN: `bash scripts/run-all-checks.sh` — first run 18/19 (picker test-fake cast), fixed, re-run 19/19
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: final handoff
+- FILES CHANGED: records/final-handoff.md
+- VALIDATIONS RUN: fresh-clone DoD check (see handoff)
+- EXIT CODES: 0
+- Lock verify: PASS

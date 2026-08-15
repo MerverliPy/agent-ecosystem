@@ -52,6 +52,9 @@ enum Command {
         name: Option<String>,
         #[arg(long)]
         dir: Option<String>,
+        /// Also run the SlopGate quality scanner (node + apps/slopgate required)
+        #[arg(long)]
+        quality: bool,
     },
     /// Scan a local skill directory with the security scanner
     Scan { dir: String },
@@ -76,7 +79,7 @@ fn main() -> anyhow::Result<()> {
         Command::Install { name, version, harness, dir } => cmd_install(&client, name, version.as_deref(), harness.as_deref(), dir.as_deref()),
         Command::Update { name, dir } => cmd_update(&client, name, dir.as_deref()),
         Command::Remove { name, dir } => cmd_remove(name, dir.as_deref()),
-        Command::Verify { name, dir } => cmd_verify(&client, name.as_deref(), dir.as_deref()),
+        Command::Verify { name, dir, quality } => cmd_verify(&client, name.as_deref(), dir.as_deref(), *quality),
         Command::Scan { dir } => cmd_scan(Path::new(dir)),
         Command::Harnesses => cmd_harnesses(),
         Command::Publish { manifest, files_dir } => cmd_publish(&client, manifest, Path::new(files_dir)),
@@ -247,9 +250,10 @@ fn cmd_remove(name: &str, dir: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_verify(client: &registry::Client, name: Option<&str>, dir: Option<&str>) -> anyhow::Result<()> {
+fn cmd_verify(client: &registry::Client, name: Option<&str>, dir: Option<&str>, quality: bool) -> anyhow::Result<()> {
     let tmp = std::env::temp_dir().join(format!("skillhub-verify-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
+    let target;
     if let Some(n) = name {
         let info = client.info(n)?;
         let latest = info
@@ -260,21 +264,67 @@ fn cmd_verify(client: &registry::Client, name: Option<&str>, dir: Option<&str>) 
             .ok_or_else(|| anyhow::anyhow!("no versions published for {}", n))?;
         let files = client.files(n, &latest)?;
         write_files(&tmp, &files.files)?;
-        let report = scan::scan_skill(&tmp)?;
+        target = tmp;
+        let report = scan::scan_skill(&target)?;
         print_report(n, &report);
+        if quality {
+            print_quality(&target, run_quality_check(&target));
+        }
         if !report.verified {
             std::process::exit(1);
         }
         Ok(())
     } else if let Some(d) = dir {
-        let report = scan::scan_skill(Path::new(d))?;
+        target = std::path::PathBuf::from(d);
+        let report = scan::scan_skill(&target)?;
         print_report(d, &report);
+        if quality {
+            print_quality(&target, run_quality_check(&target));
+        }
         if !report.verified {
             std::process::exit(1);
         }
         Ok(())
     } else {
         anyhow::bail!("verify requires a package name or --dir")
+    }
+}
+
+/// SlopGate quality check: shells out to the slopgate CLI (node type-stripping).
+/// Returns None when the scanner is unavailable (no node, no repo checkout).
+fn run_quality_check(dir: &std::path::Path) -> Option<serde_json::Value> {
+    let cli = std::env::var("SKILLHUB_SLOPGATE_CLI").ok().map(std::path::PathBuf::from).or_else(|| {
+        // repo-root relative: works when run from the ecosystem checkout
+        let guess = std::path::Path::new("apps/slopgate/src/cli.ts");
+        guess.exists().then(|| guess.to_path_buf())
+    })?;
+    let out = std::process::Command::new("node")
+        .arg("--experimental-strip-types")
+        .arg(&cli)
+        .arg("scan")
+        .arg(dir)
+        .arg("--json")
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    serde_json::from_slice(&out.stdout).ok()
+}
+
+fn print_quality(dir: &std::path::Path, report: Option<serde_json::Value>) {
+    match report {
+        Some(r) => {
+            let score = r["score"]
+                .as_object()
+                .and_then(|o| o.get("score"))
+                .or_else(|| r.get("score"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let findings = r["findings"].as_array().map(|a| a.len()).unwrap_or(0);
+            println!("QUALITY: {} — slop score {:.0}/100 ({} finding(s))", dir.display(), score, findings);
+        }
+        None => println!("QUALITY: skipped — slopgate scanner unavailable (SKILLHUB_SLOPGATE_CLI or repo checkout + node required)"),
     }
 }
 

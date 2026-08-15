@@ -46,6 +46,11 @@ h2 { font-size: 18px; margin: 0 0 12px; }
 .badge.high-risk { background: rgba(248,81,73,.15); color: var(--red); }
 .badge.muted { background: var(--panel-2); color: var(--muted); }
 
+.q-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.q-badge.q-good { background: rgba(63,185,80,.15); color: var(--green); }
+.q-badge.q-warn { background: rgba(255,196,0,.15); color: #d29922; }
+.q-badge.q-bad { background: rgba(248,81,73,.15); color: var(--red); }
+
 .meta { color: var(--muted); font-size: 12px; }
 
 code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12px; }

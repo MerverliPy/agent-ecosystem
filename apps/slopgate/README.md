@@ -100,6 +100,13 @@ writes the step summary, and fails CI above `threshold` when `block: true`.
 See `apps/slopgate-dash/` — per-repo score history and a trend line rendered from
 recorded check artifacts (`slopgate-dash/data/history.json`).
 
+## Ecosystem
+
+SlopGate is the ecosystem's quality gate: **SkillHub** runs it as the optional
+`verify --quality` check (quality score on skill pages), and its GitHub Action
+(`apps/slopgate-action`) gates PRs. **BenchKit** supplies the honest-data culture
+(DEC-0006) that keeps scoring credible. See `apps/README.md` for the full map.
+
 ## Tests & typecheck
 
 ```bash

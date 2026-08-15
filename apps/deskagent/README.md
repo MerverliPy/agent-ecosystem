@@ -70,6 +70,13 @@ Real semantic embeddings plug in behind the same `Embedder` trait with
 `cargo build --features fastembed` (fastembed-rs + ONNX; downloads the
 all-MiniLM-L12-v2 model on first use).
 
+## Ecosystem
+
+DeskAgent is where the ecosystem converges: **BenchKit** data + `will-it-run`
+drive the model picker, **SkillHub** skills install in-app (surfacing as
+procedural memory), and **SlopGate**-style discipline keeps the codebase honest.
+Shared specs/schemas live in `shared/`. See `apps/README.md` for the full map.
+
 ## Phase 6 hook
 
 ```

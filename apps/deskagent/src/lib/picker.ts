@@ -65,4 +65,77 @@ export function verdictLabel(v: PickerEntry["verdict"]): string {
   return v === "fits" ? "runs on your machine" : v === "streams-needed" ? "streams from NVMe/disk" : "no-fit";
 }
 
+// ---- live BenchKit source with cached fallback (Phase 7 Task 2) -----------------
+
+export const BENCHKIT_LIVE_URL =
+  "https://raw.githubusercontent.com/MerverliPy/agent-ecosystem/main/shared/datasets/benchmarks.jsonl";
+
+function parseJsonl(text: string): BenchRow[] {
+  const rows: BenchRow[] = [];
+  for (const line of text.split("\n")) {
+    const l = line.trim();
+    if (!l) continue;
+    try {
+      rows.push(JSON.parse(l) as BenchRow);
+    } catch {
+      // skip malformed lines rather than failing the whole fetch
+    }
+  }
+  return rows;
+}
+
+function toBenchRow(raw: Record<string, unknown>): BenchRow | null {
+  if (typeof raw.model !== "string" || typeof raw.runtime !== "string" || typeof raw.source_url !== "string") {
+    return null;
+  }
+  const h = (raw.hardware ?? {}) as Record<string, unknown>;
+  return {
+    model: raw.model,
+    runtime: raw.runtime,
+    quantization: (raw.quantization as string | null | undefined) ?? null,
+    tokens_per_sec: (raw.tokens_per_sec as number | null | undefined) ?? null,
+    peak_ram_gb: (raw.peak_ram_gb as number | null | undefined) ?? null,
+    source_url: raw.source_url,
+    hardware: {
+      cpu: (h.cpu as string | undefined) ?? "unknown",
+      ram_gb: (h.ram_gb as number | undefined) ?? 0,
+      gpu: (h.gpu as string | null | undefined) ?? null,
+      os: (h.os as string | null | undefined) ?? null,
+    },
+  };
+}
+
+let liveCache: BenchRow[] | null = null;
+
+/** Test hook: clear the in-memory live-cache. */
+export function resetLiveCache(): void {
+  liveCache = null;
+}
+
+/**
+ * Fetch the live BenchKit dataset; on any failure (offline, 404, bad rows) fall back
+ * to the bundled catalog (offline fallback, DEC-0005). `fetchImpl` is injectable for
+ * tests. Rows that fail the shape check are dropped rather than failing the fetch.
+ */
+export async function loadLiveCatalog(fetchImpl: typeof fetch = fetch): Promise<{ rows: BenchRow[]; source: "live" | "bundled"; error?: string }> {
+  if (liveCache) return { rows: liveCache, source: "live" };
+  try {
+    const res = await fetchImpl(BENCHKIT_LIVE_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const rows = parseJsonl(text)
+      .map((r) => toBenchRow(r as unknown as Record<string, unknown>))
+      .filter((r): r is BenchRow => r !== null);
+    if (rows.length === 0) throw new Error("no valid rows");
+    liveCache = rows;
+    return { rows, source: "live" };
+  } catch (err) {
+    return {
+      rows: BENCHKIT_CATALOG,
+      source: "bundled",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export { BENCHKIT_CATALOG };

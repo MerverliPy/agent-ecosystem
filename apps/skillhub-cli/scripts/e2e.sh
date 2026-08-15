@@ -84,6 +84,21 @@ while read -r n; do
 done < <(jq -r '.[].name' "$TMP/pkgs.json") >"$TMP/details.jsonl"
 jq -n --argjson arr "$(jq -s . "$TMP/details.jsonl")" '{updated_at: (now|todateiso8601), packages: $arr}' >"$WEB_DATA/skills.json"
 jq -e '.packages | length >= 4' "$WEB_DATA/skills.json" >/dev/null 2>&1 && ok "snapshot has 4+ packages" || bad "snapshot incomplete"
+
+step "inject SlopGate quality scores into the snapshot (Phase 7 Task 3)"
+SLOP="$ROOT/apps/slopgate/src/cli.ts"
+quality_of() { # quality_of <fixture-dir> -> score
+  node --experimental-strip-types "$SLOP" score "$1" --json 2>/dev/null | jq -r '.score'
+}
+QUALITY_JSON=$(jq -n \
+  --argjson hello "$(quality_of "$ROOT/apps/skillhub-cli/fixtures/benign-skill")" \
+  --argjson exfil "$(quality_of "$ROOT/apps/skillhub-cli/fixtures/exfil-shell-skill")" \
+  --argjson inject "$(quality_of "$ROOT/apps/skillhub-cli/fixtures/prompt-inject-skill")" \
+  --argjson secret "$(quality_of "$ROOT/apps/skillhub-cli/fixtures/secret-stealer-skill")" \
+  '{ "demo/hello-skill": $hello, "malware/exfil-shell": $exfil, "malware/prompt-inject": $inject, "malware/secret-stealer": $secret }')
+jq --argjson q "$QUALITY_JSON" '(.packages[]) |= (.quality_score = ($q[.name] // null))' "$WEB_DATA/skills.json" >"$TMP/skills-q2.json"
+mv "$TMP/skills-q2.json" "$WEB_DATA/skills.json"
+jq -e '.packages[0].quality_score != null' "$WEB_DATA/skills.json" >/dev/null 2>&1 && ok "quality scores injected" || bad "quality injection failed"
 echo "   snapshot: $WEB_DATA/skills.json"
 
 echo
