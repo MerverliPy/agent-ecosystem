@@ -458,3 +458,80 @@
 - VALIDATIONS RUN: fresh-clone DoD check (see handoff)
 - EXIT CODES: 0
 - Lock verify: PASS
+
+---
+
+## Adversarial review of Milestone 1 (post-acceptance)
+
+**Date:** 2026-08-15
+**Scope:** Full Milestone 1 deliverable (all 7 phases COMPLETE, working tree at commit 226cf88).
+**Method:** 3 parallel fresh-context reviewers with distinct angles (security/privacy, correctness/reproducibility, structural/plan-compliance) + supervisor independent verification of the highest-severity findings.
+
+### Outcome: fixes applied (committed 1fba68d)
+
+Reviewers returned a convergent picture: the Rust core (`deskagent-core`) is genuine and
+well-tested, but the milestone-acceptance claim was materially stronger than shipped reality.
+Several load-bearing paths were placeholders, and the encryption path had a data-loss bug.
+All fixes below are in `apps/` + `shared/datasets/` only — PHASES.md content and PLAN.lock
+are untouched (lock verify PASS throughout).
+
+**Blockers / high (fixed):**
+1. Passphrase encryption was unrecoverable across restarts: `resolve_key` derived the key
+   from a fresh `random_salt()` each launch and discarded it, and `decrypt_field` panicked
+   on the wrong-key AES-GCM failure. Fixed: persisted salt (`deskagent.salt`) + `Result`
+   instead of panic.
+2. `StoreConfig.encrypt=true` was silently ignored (plaintext store). Fixed: `open()` now
+   rejects `encrypt=true` without a key; `open_store` passes the correct flag.
+3. The app did NOT actually chat with a local model — `App.tsx` returned a
+   `(model runtime lands in Phase 6)` echo. Fixed: wired `chat_complete` into `handleSend`.
+4. Model picker hardcoded `totalParamsB: 8`, showing "fits" for a 2.78T model on 16GB.
+   Fixed: catalog carries `active_params_b`/`disk_size_gb`; picker uses real counts.
+5. Extraction-pass trigger was dead code in the live shell (`turns_since_pass` never
+   advanced). Fixed: `capture_turn` increments a per-session turn counter;
+   `run_extraction_pass` resets it. Regression test added.
+
+**Optional improvements (fixed):**
+6. SlopGate→SkillHub `verify --quality` always reported score 0 (`slop scan --json` has no
+   `score`). Fixed: run `slop score --json`, parse numeric score + `totalFindings`.
+7. Approval cards in the UI never persisted decisions (`approval_decide` unwired). Fixed:
+   `bridge.decideApproval` + `onDecide` prop.
+8. `SkillLock` lockfile was not compatible with the SkillHub CLI format. Fixed: aligned to
+   canonical fields (source/checksum/harness/installed_at) and corrected the claim.
+9. Retrieval injection budget had a first-hit bypass. Fixed: strict on every hit.
+10. `wipe_all` left sessions/messages/actions/undo_log (DEC-0009 "deletable"). Fixed: full
+    wipe. Unknown `scope_type`/`approval` strings now error instead of silently defaulting.
+11. Two benchmark `source_url` rows carried a non-URI `(Part III…)` annotation. Fixed:
+    normalized to valid URIs.
+
+**Validation (final):** `run-all-checks.sh` 19/19 · `cargo test` 54/54 (+1 ignored live-Ollama)
+· deskagent `tsc --noEmit` + `vite build` clean · skillhub-cli 9/9 · will-it-run 8/8 ·
+`plan-lock.sh verify` OK.
+
+### Deferred follow-ups (NOT done — tracked for next increment)
+
+- **Scanner evadability (SkillHub scan.rs)** — encoded payloads are never decoded;
+  `python -c`/`node -e` and non-`-X` data exfil are unmodeled; `verified` ignores all
+  medium findings (ENC-*, NET-02); INJ rules are phrase-literal. Real but inherent to a
+  regex-based P0 scanner; belongs in a scanner-v2 pass (would also fix false-positive
+  risk on SHELL-04 `$(` / NET-01 raw-IP).
+- **Registry trusts client `verified` + no auth** — `/api/publish` accepts self-attested
+  `verified`/`permissions`; bound to 127.0.0.1 and disclosed as Phase 7+ (needs a
+  server-side scan + a shared token before any non-localhost exposure).
+- **Fresh-clone reproducibility** — `run-all-checks.sh` has no `npm ci`/`cargo fetch`
+  bootstrap, so `git clone` → `run-all-checks.sh` requires manual installs first (handoff
+  wording overstates the DoD). A `scripts/bootstrap.sh` should be added.
+- **Rejected memories keep content on disk** — `approvals::decide` downgrades confidence
+  but doesn't scrub content on rejection (retention-preference dependent).
+- **`decide` is non-idempotent** — re-deciding an already-decided card re-applies the
+  ±0.1 delta and appends a duplicate undo entry (needs a `status == "pending"` guard).
+- **`installed_skills` uses `arr.last()` for default version** — resolves to oldest, not
+  newest (registry returns versions newest-first).
+
+### Acceptance-wording note (pending human decision)
+
+The Phase 6 exit criteria and DoD text claim "app chats with a local model"; as shipped,
+this was true only of an `#[ignore]`d live-Ollama cargo test — the app UI itself was an
+echo stub. That code gap is now fixed by this review's change set. No plan change is
+required (code only), but the human may want a `scripts/plan-lock.sh propose` to record
+this reconciliation in the acceptance narrative, or to explicitly accept the fix as the
+satisfaction of the DoD.
