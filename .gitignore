@@ -15,6 +15,12 @@ out/
 *.log
 .DS_Store
 
+# Runtime artifacts
+*.db
+*.db-wal
+*.db-shm
+skillhub-registry/data/
+
 # Local env
 .env
 .env.local
