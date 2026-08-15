@@ -1,0 +1,37 @@
+name: 'SlopGate'
+description: 'Scan a repo for AI-slop patterns and gate CI on a 0-100 slop score (higher = worse).'
+author: 'agent-ecosystem'
+
+inputs:
+  path:
+    description: 'Path (relative to the repo root) to scan.'
+    required: false
+    default: '.'
+  threshold:
+    description: 'Maximum acceptable slop score (0-100). The job fails when the score exceeds it and `block` is true.'
+    required: false
+    default: '50'
+  block:
+    description: 'Fail CI when the score exceeds the threshold.'
+    required: false
+    default: 'true'
+  comment:
+    description: 'Post a SlopGate report comment on pull requests.'
+    required: false
+    default: 'true'
+  sarif:
+    description: 'Write slopgate.sarif to GITHUB_WORKSPACE (upload it with actions/upload-artifact).'
+    required: false
+    default: 'true'
+  token:
+    description: 'GitHub token used to post PR comments.'
+    required: false
+    default: '${{ github.token }}'
+
+runs:
+  using: 'node20'
+  main: 'main.mjs'
+
+branding:
+  icon: 'shield'
+  color: 'orange'

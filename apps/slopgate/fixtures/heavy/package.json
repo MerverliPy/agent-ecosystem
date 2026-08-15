@@ -1,0 +1,7 @@
+{
+  "name": "fixture-heavy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SlopGate fixture: a heavily sloppy repo — every file full of AI-generated habits."
+}

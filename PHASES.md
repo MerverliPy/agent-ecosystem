@@ -87,14 +87,14 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] End-to-end test: publish a fixture skill from a local git repo → search → install into a temp harness dir → verify.
 - **Exit criteria:** CLI installs a real skill into a temp harness; scanner flags all 3 malicious fixtures; registry serves search; web site lists the published skill with badges.
 
-## Phase 4: SlopGate — rules, score, CI action, dashboard <!-- PENDING --> <!-- DEPENDS_ON: Phase 3 -->
+## Phase 4: SlopGate — rules, score, CI action, dashboard <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 3 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && npm test && cd apps/slopgate-action && npm run build -->
-- [ ] Scaffold `apps/slopgate` (TypeScript). Implement deterministic rule pack (TS/JS): dead abstractions, unused helpers, cargo-cult comments, generic naming, over-engineering patterns, boilerplate commits/PR text, "as an AI" phrasing. 30+ rules; each rule has fixture tests.
-- [ ] Implement `slop` CLI: `slop scan <path>` (files), `slop score` (0–100 with per-rule breakdown), `slop lint` exit codes for CI.
-- [ ] Implement LLM review layer (bring-your-own-key): scores prose/commit/PR-description slop using a pattern catalog; disabled when no key present (deterministic core always works).
-- [ ] Scaffold `apps/slopgate-action` (GitHub Action): runs scan, posts inline comments + summary, supports `threshold` input, writes SARIF artifact, fails CI above threshold (input `block: true`).
-- [ ] Seed 3 fixture repos (clean / mildly sloppy / heavily sloppy) in `apps/slopgate/fixtures/`; assert score ordering and threshold gating in tests.
-- [ ] Scaffold `apps/slopgate-dash` (Next.js): per-repo score history + trend line (reads check artifacts; optional hosted API later).
+- [x] Scaffold `apps/slopgate` (TypeScript). Implement deterministic rule pack (TS/JS): dead abstractions, unused helpers, cargo-cult comments, generic naming, over-engineering patterns, boilerplate commits/PR text, "as an AI" phrasing. 30+ rules; each rule has fixture tests.
+- [x] Implement `slop` CLI: `slop scan <path>` (files), `slop score` (0–100 with per-rule breakdown), `slop lint` exit codes for CI.
+- [x] Implement LLM review layer (bring-your-own-key): scores prose/commit/PR-description slop using a pattern catalog; disabled when no key present (deterministic core always works).
+- [x] Scaffold `apps/slopgate-action` (GitHub Action): runs scan, posts inline comments + summary, supports `threshold` input, writes SARIF artifact, fails CI above threshold (input `block: true`).
+- [x] Seed 3 fixture repos (clean / mildly sloppy / heavily sloppy) in `apps/slopgate/fixtures/`; assert score ordering and threshold gating in tests.
+- [x] Scaffold `apps/slopgate-dash` (Next.js): per-repo score history + trend line (reads check artifacts; optional hosted API later).
 - **Exit criteria:** rule pack passes fixture tests; sloppy fixture scores high and clean low; action fails CI at threshold; dashboard renders a trend from a recorded artifact.
 
 ## Phase 5: DeskAgent — self-memory core <!-- PENDING --> <!-- DEPENDS_ON: Phase 4 -->

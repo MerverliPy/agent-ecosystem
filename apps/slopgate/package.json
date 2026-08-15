@@ -1,0 +1,21 @@
+{
+  "name": "slopgate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SlopGate — deterministic rule pack + scorer for AI-slop code, prose, commits and PR text",
+  "bin": {
+    "slop": "./bin/slop.mjs"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/rules.test.ts test/scanner.test.ts test/score.test.ts test/cli.test.ts test/llm.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

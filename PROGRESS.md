@@ -212,3 +212,75 @@
 ## CHANGE REQUEST <!-- REQUEST_CLOSED -->
 - Proposed: 2026-08-15T01:16:08Z — META repository field update
 - Status: APPROVED by human 2026-08-15 (re-locked 040ca814…, committed 2b4da29).
+
+---
+
+## Phase 4: SlopGate — rules, score, CI action, dashboard
+
+**Phase status:** IN_PROGRESS (2026-08-15)
+**Started:** 2026-08-15
+**Notes:**
+- Deterministic rule pack in `apps/slopgate` (TypeScript, zero runtime deps, runs via `node --experimental-strip-types`): 46 rules — DEAD×6, UNUSED×5, COMM×6, NAME×5, OVER×9, COMMIT×11, AI×14. Every rule has inline fixture tests (positive + negative).
+- Cross-file analysis (unreferenced exports/interfaces/local classes, pass-through wrappers) via regex symbol table; per-file rules via brace-aware scanning. Heuristics documented; a rule never crashes a scan.
+- `slop` CLI: scan (text/JSON/SARIF), score (0–100, higher = worse), lint (threshold gate, exit 1 above with `--block`), check-text, llm-review, rules, version. SARIF 2.1.0 output.
+- Scoring: severity weights high 10 / med 5 / low 2, density bonus for files > 5 findings, cap 100.
+- Fixtures seeded: clean → 0, mild → 29, heavy → 100 (53 findings, 36 distinct rules). Ordering + threshold gating asserted in tests.
+- LLM review layer (bring-your-own-key): deterministic pattern catalog always runs; LLM pass disabled without SLOPGATE_LLM_KEY/OPENAI_API_KEY (DEC-0005). Mock-fetch tests only — no network.
+- Root `package.json` added (required by Phase 4 VALIDATE `npm test`); test runner uses glob discovery for `*.test.ts`.
+
+### Task done: Scaffold apps/slopgate + deterministic rule pack
+- FILES CHANGED: apps/slopgate/ (package.json, tsconfig, bin/slop.mjs, src/{types,analysis,scanner,score,report,llm,cli}.ts, src/rules/{dead,unused,comments,naming,over,commit,ai,index}.ts, README.md), package.json (root, new)
+- VALIDATIONS RUN: `npm test --prefix .` exit 0 (80/80); `npx --prefix apps/slopgate tsc --noEmit -p apps/slopgate/tsconfig.json` exit 0
+- EXIT CODES: 0 / 0
+- Lock verify: PASS
+
+### Task done: slop CLI (scan / score / lint)
+- FILES CHANGED: apps/slopgate/src/cli.ts, report.ts, score.ts (scan+score+lint+check-text+llm-review+rules+version; JSON/SARIF output)
+- VALIDATIONS RUN: CLI integration tests in test/cli.test.ts (13 tests, all pass); SARIF artifact written and parsed
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: LLM review layer (BYOK)
+- FILES CHANGED: apps/slopgate/src/llm.ts, test/llm.test.ts (llmConfig, patternCatalog, catalogReview, parseLlmJson, mergeReviews, reviewProseWithLlm w/ mock fetch)
+- VALIDATIONS RUN: `npm test` llm tests 10/10; CLI `llm-review` without key returns enabled:false + catalog findings (exit 0)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Fixture repos + ordering/gating tests
+- FILES CHANGED: apps/slopgate/fixtures/{clean,mild,heavy}/ (package.json, src/*, README.md)
+- VALIDATIONS RUN: score ordering clean(0) < mild(29) < heavy(100); `slop lint --threshold 50` fails heavy (exit 1), passes clean (exit 0); test/score.test.ts 7/7
+- EXIT CODES: 0 (and 1 as designed for the gate)
+- Lock verify: PASS
+
+### Task done: slopgate-action (GitHub Action)
+- FILES CHANGED: apps/slopgate-action/ (action.yml, package.json, main.mjs, lib/core.mjs, test/core.test.mjs, README.md)
+- VALIDATIONS RUN: `npm test --prefix apps/slopgate-action` exit 0 (9/9: inputs, gate pass/warn/fail, comment+summary builders, event-payload parsing, real CLI integration via runSlop); `npm run build --prefix apps/slopgate-action` exit 0
+- EXIT CODES: 0 / 0
+- Lock verify: PASS
+
+### Task done: slopgate-dash (Next.js)
+- FILES CHANGED: apps/slopgate-dash/ (package.json, tsconfig, next.config.ts, app/{layout,page,globals.css}.tsx, app/repos/[repo]/page.tsx, components/trend-chart.tsx, lib/{types,history}.ts, scripts/record-run.mjs, data/history.json, test/history.test.mjs, README.md)
+- VALIDATIONS RUN: `npm test --prefix apps/slopgate-dash` exit 0 (5/5 data contract); `npm run build --prefix apps/slopgate-dash` exit 0 (7 static pages, 3 repo pages); artifact recorded from real scans (clean 0 / mild 29 / heavy 100); rendered HTML verified (stats + polyline points)
+- EXIT CODES: 0 / 0
+- Lock verify: PASS
+
+## Phase 4 post-phase
+
+**Phase status:** COMPLETE (2026-08-15)
+- VALIDATE hook: `bash scripts/plan-lock.sh verify` exit 0 · `npm test` exit 0 (80/80) · `cd apps/slopgate-action && npm run build` exit 0
+- Exit criteria met: rule pack passes fixture tests (80/80); sloppy fixture scores high (100) and clean low (0); action gates CI at threshold (decideGate fail + lint exit 1 on heavy); dashboard renders a trend from the recorded artifact (7 static pages, polyline verified in HTML)
+- Handoff: `records/phase-4-handoff.md` — 6/6 tasks, no blocked gates; CI not triggered (no `.github/workflows` yet — Phase 7)
+
+## Phase 5: DeskAgent — self-memory core
+
+**Phase status:** PENDING
+**Mirrored tasks (from PHASES.md; checkboxes live in PHASES.md):**
+- [ ] Create `shared/schemas/memory-event.schema.json`: four memory kinds (episodic, semantic, procedural, working) with sources, confidence, timestamps, and project scope; include validation tests.
+- [ ] Scaffold `apps/deskagent` (Tauri 2 + React + TypeScript). Window shell, chat UI, session persistence (SQLite).
+- [ ] Implement memory store (SQLite + local embeddings via sqlite-vec/fastembed-rs): episodic log, semantic facts, procedural records, working context; encrypted at rest; export/delete APIs.
+- [ ] Implement capture pipeline: every conversation appended as raw episodes; extraction pass distills facts/preferences every N turns (default 5, max 20 memories per pass).
+- [ ] Implement consolidation & persona: regenerate the persona model every N new memories (default 50); dedupe + conflict detection + decay; reflection on local models by default, per-session opt-in cloud for heavy passes (DEC-0005, DEC-0009).
+- [ ] Implement hybrid retrieval: keyword + embedding recall (RRF fusion) with strict injection budget; companion-level + per-project scoping (both scopes per DEC-0009).
+- [ ] Implement propose-to-remember approval cards: every memory write routes through the sandbox approval system; approvals and rejections recorded as learning signal.
+- [ ] Implement memory UX: memory explorer (timeline/facts/projects — browse, edit, pin, delete, export) and persona card view.
+- Exit criteria: memory schema validated; store encrypted and deletable; pipeline extracts memories from a fixture conversation; persona regenerates; retrieval returns scoped hits; memory writes require approval; explorer and persona card render.

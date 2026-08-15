@@ -1,0 +1,165 @@
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --border: #2d333b;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --green: #30a46c;
+  --amber: #f5a524;
+  --red: #e5484d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.55;
+}
+
+.wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+header h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+}
+
+header p {
+  color: var(--muted);
+  margin: 0 0 1.5rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.table a:hover {
+  text-decoration: underline;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.badge.good {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+}
+
+.badge.warn {
+  background: color-mix(in srgb, var(--amber) 18%, transparent);
+  color: var(--amber);
+}
+
+.badge.bad {
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+  color: var(--red);
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.back {
+  display: inline-block;
+  color: var(--muted);
+  text-decoration: none;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.back:hover {
+  color: var(--text);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.stats {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 1.5rem;
+}
+
+.stat {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  min-width: 130px;
+}
+
+.stat .label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat .value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+ul.runs {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+
+ul.runs li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+
+ul.runs li:first-child {
+  border-top: 1px solid var(--border);
+}

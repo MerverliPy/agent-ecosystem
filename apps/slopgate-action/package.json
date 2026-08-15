@@ -1,0 +1,11 @@
+{
+  "name": "slopgate-action",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SlopGate GitHub Action — scan, comment, SARIF, threshold gate",
+  "scripts": {
+    "build": "node --check main.mjs && node --check lib/core.mjs",
+    "test": "node --test test/core.test.mjs"
+  }
+}

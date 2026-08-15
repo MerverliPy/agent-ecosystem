@@ -1,0 +1,32 @@
+{
+  "generatedAt": "2026-08-15T00:00:00.000Z",
+  "repos": [
+    {
+      "name": "fixture-clean",
+      "url": "https://github.com/MerverliPy/agent-ecosystem/tree/main/apps/slopgate/fixtures/clean",
+      "runs": [
+        { "date": "2026-08-01", "score": 4, "findings": 2, "high": 0, "medium": 2, "low": 0, "sha": "dca7718" },
+        { "date": "2026-08-08", "score": 2, "findings": 1, "high": 0, "medium": 1, "low": 0, "sha": "2b4da29" },
+        { "date": "2026-08-15", "score": 0, "findings": 0, "high": 0, "medium": 0, "low": 0 }
+      ]
+    },
+    {
+      "name": "fixture-mild",
+      "url": "https://github.com/MerverliPy/agent-ecosystem/tree/main/apps/slopgate/fixtures/mild",
+      "runs": [
+        { "date": "2026-08-01", "score": 22, "findings": 5, "high": 0, "medium": 4, "low": 1, "sha": "dca7718" },
+        { "date": "2026-08-08", "score": 24, "findings": 6, "high": 0, "medium": 5, "low": 1, "sha": "2b4da29" },
+        { "date": "2026-08-15", "score": 29, "findings": 7, "high": 0, "medium": 5, "low": 2 }
+      ]
+    },
+    {
+      "name": "fixture-heavy",
+      "url": "https://github.com/MerverliPy/agent-ecosystem/tree/main/apps/slopgate/fixtures/heavy",
+      "runs": [
+        { "date": "2026-08-01", "score": 88, "findings": 44, "high": 4, "medium": 18, "low": 22, "sha": "dca7718" },
+        { "date": "2026-08-08", "score": 96, "findings": 49, "high": 5, "medium": 19, "low": 25, "sha": "2b4da29" },
+        { "date": "2026-08-15", "score": 100, "findings": 53, "high": 5, "medium": 21, "low": 27 }
+      ]
+    }
+  ]
+}

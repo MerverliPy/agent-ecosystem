@@ -1,0 +1,24 @@
+{
+  "name": "slopgate-dash",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SlopGate dashboard — per-repo slop score history and trend lines from recorded check artifacts",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test --experimental-strip-types test/history.test.mjs",
+    "record": "node scripts/record-run.mjs"
+  },
+  "dependencies": {
+    "next": "^15.3.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.7.0"
+  }
+}
