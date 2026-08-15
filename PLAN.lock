@@ -3,7 +3,7 @@
   "policy": "content-locked",
   "created_at": "2026-08-14T20:06:16Z",
   "approved_by": "human",
-  "content_sha256": "040ca8142ae92caec7d7df09c7ba1886a3ea5c72bd058d8f3e9aceaac68fbe12",
+  "content_sha256": "8d9253e4668ca5eb679ff95a5d66c81eeaef0045d235d832ea8d5074dc8ac884",
   "token_sha256": "52789fd21dcd022c13fde19eb35303264e954be2e4e447b0a4dafacc8dc55427",
   "history": [
     {
@@ -20,6 +20,11 @@
       "action": "approve",
       "at": "2026-08-15T01:16:59Z",
       "reason": "META repo field update"
+    },
+    {
+      "action": "approve",
+      "at": "2026-08-15T15:32:49Z",
+      "reason": "Milestone 2 — Phases 8-10 approved"
     }
   ]
 }

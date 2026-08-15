@@ -10,6 +10,17 @@
 
 ---
 
+## Note: Milestone 2 planning artifacts + cleanup item
+
+- Planning / proposal artifacts (untracked advisory docs): `records/planning-milestone-2.md`,
+  `records/planning-milestone-2-phases.md`, `records/planning-milestone-2-pasteblock.md`.
+- **CLEANUP AFTER THE MILESTONE-2 APPROVAL CEREMONY:** `scripts/apply-milestone-2.sh` is a
+  one-shot helper for the human-led `approve` step (edit → approve → verify). It should be
+  reviewed and either removed from the tree or kept deliberately once Phases 8–10 are
+  running. Do not rely on it as a permanent tool.
+
+---
+
 ## Phase 1: Recon, scaffold, and lock activation
 
 **Phase status:** COMPLETE (2026-08-14)
@@ -540,3 +551,8 @@ satisfaction of the DoD.
 - Proposed: 2026-08-15T10:05:24Z
 - Reason: Reconcile Milestone 1 acceptance wording: the Phase 6 DoD claimed the app chats with a local model, but the shipped app was an echo stub. Adversarial review commit wired chat_complete into the app UI and resolved the gap. This change request records that the code fix, not the original claim, satisfies the DoD.
 - Status: **APPROVED by human 2026-08-15T10:15:47Z** (re-locked via `plan-lock.sh approve`; no PHASES.md content change required — the code fix in commit 1fba68d is accepted as satisfaction of the DoD).
+
+## CHANGE REQUEST <!-- REQUEST_OPEN -->
+- Proposed: 2026-08-15T15:26:16Z
+- Reason: Milestone 2 — DeskAgent CLI (TUI), registry security, release/distribution (Phases 8-10)
+- Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "Milestone 2 — DeskAgent CLI (TUI), registry security, release/distribution (Phases 8-10)"'.
