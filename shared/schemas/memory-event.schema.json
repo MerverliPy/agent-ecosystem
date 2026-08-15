@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "memory-event.schema.json",
+  "title": "DeskAgent Memory Event",
+  "description": "A memory event captured by DeskAgent. Four kinds: episodic (raw experiences), semantic (facts/preferences), procedural (how-to knowledge), working (active context). Local-first and user-owned per DEC-0009: stored locally, encrypted at rest, exportable, deletable.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "kind", "content", "source", "confidence", "created_at", "scope"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "kind": {
+      "enum": ["episodic", "semantic", "procedural", "working"]
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The memory payload: raw transcript (episodic), a distilled fact (semantic), a how-to step (procedural), or an in-flight context note (working)."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Optional one-line summary used by the memory explorer."
+    },
+    "source": {
+      "enum": ["conversation", "user", "file", "api", "reflection", "extraction", "synthesis", "other"],
+      "description": "Where the memory came from. extraction = capture pipeline distills raw episodes; reflection = consolidation/persona pass; synthesis = merged memories."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0..1 certainty estimate; extraction and reflection passes may downgrade confidence."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "episode_id": {
+      "type": "string",
+      "description": "For derived memories, the source raw episode(s); comma-separated ids allowed."
+    },
+    "scope": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["companion", "project"],
+          "description": "companion = personal, spans all projects; project = scoped to one project (DEC-0009)."
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Required when scope.type is project."
+        },
+        "project_path": {
+          "type": "string",
+          "description": "Optional filesystem path hint for the project scope."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "project" } }
+          },
+          "then": {
+            "required": ["project_id"]
+          }
+        }
+      ]
+    },
+    "approval": {
+      "enum": ["pending", "approved", "rejected"],
+      "description": "Every memory write routes through propose-to-remember approval (DEC-0009). pending until the user decides."
+    },
+    "decay": {
+      "type": "object",
+      "properties": {
+        "half_life_days": { "type": "number", "minimum": 0 },
+        "last_refreshed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "embedding": {
+      "type": "object",
+      "properties": {
+        "model": { "type": "string" },
+        "dimensions": { "type": "integer", "minimum": 1 },
+        "vector": {
+          "type": "array",
+          "items": { "type": "number" }
+        }
+      },
+      "required": ["model", "dimensions", "vector"]
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

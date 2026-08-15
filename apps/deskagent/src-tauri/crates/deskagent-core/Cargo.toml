@@ -1,0 +1,32 @@
+[package]
+name = "deskagent-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DeskAgent self-memory core: SQLite store, at-rest encryption, capture, consolidation/persona, hybrid retrieval, approval gating. No Tauri dependency."
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+aes-gcm = "0.10"
+pbkdf2 = "0.12"
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
+
+[features]
+default = []
+# Optional real local embeddings via fastembed-rs (ONNX runtime; downloads models on first
+# use). Off by default so builds/tests stay offline and dependency-light; the deterministic
+# HashEmbedder is the default and satisfies the local-embeddings contract for P0.
+fastembed = ["dep:fastembed"]
+
+[dependencies.fastembed]
+package = "fastembed"
+version = "5"
+optional = true
+# default features pull ort with downloaded binaries + hf-hub for model downloads;
+# the feature is off by default so default builds/tests stay offline.

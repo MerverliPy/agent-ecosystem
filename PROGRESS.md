@@ -273,14 +273,80 @@
 
 ## Phase 5: DeskAgent — self-memory core
 
+**Phase status:** COMPLETE (2026-08-15)
+**Started:** 2026-08-15
+**Notes:**
+- **Environment gate resolved by human approval:** webkit2gtk-4.1-dev + javascriptcoregtk-4.1-dev + libssl-dev installed (sudo via user-approved script) so the Tauri 2 shell compiles; tauri-cli itself not needed for `cargo check`/`cargo test`.
+- Schema: `shared/schemas/memory-event.schema.json` (draft 2020-12) + zero-dep validator `validate-memory-event.mjs` + 12 tests (four kinds, scopes, approvals, embedding/decay shapes).
+- Rust core `src-tauri/crates/deskagent-core` (no Tauri dep): SQLite store (rusqlite bundled) with 4 memory kinds + scopes + approvals; AES-256-GCM at-rest encryption w/ PBKDF2; deterministic HashEmbedder + feature-gated fastembed-rs (verified compiles via `cargo check --features fastembed`); capture pipeline (raw episodes + extraction pass every 5 turns, max 20/pass); consolidation (persona regen every 50 memories, dedupe w/ exact+subset+cosine, conflict detection, decay); hybrid retrieval (keyword+embedding RRF, strict injection budget, companion/project scoping); approval cards (+0.1/-0.1 learning signal); session persistence. 35 unit tests.
+- Tauri 2 shell: commands for sessions, capture, retrieval, approvals, persona, export/wipe; keyfile (0600) or DESKAGENT_PASSPHRASE for encryption; placeholder icons generated; full workspace `cargo check` green.
+- React frontend (Vite): chat UI, session list, memory explorer (kind/scope/approval/search filters), persona card, approval cards; bridge falls back to localStorage demo mode in the browser; 10 pure-logic tests; `tsc --noEmit && vite build` green.
+- Implementation notes: raw episodes stored approved (they mirror the user's own chat log); *distilled* memories always route through approval cards (DEC-0009). Embeddings: SQLite BLOB vectors + Rust cosine (sqlite-vec not needed; documented). Dedupe cosine restricted to ≥8-token texts after a 64-dim collision bug (13/50 false merges) was caught by tests.
+- VALIDATE hook: `bash scripts/plan-lock.sh verify` exit 0 · `npm test` exit 0 (10/10) · `cargo check` exit 0. Additional: `cargo test` 35/35, `cargo check --features fastembed` exit 0, `npm run build` exit 0, schema tests 12/12.
+
+### Task done: memory-event schema + validation tests
+- FILES CHANGED: shared/schemas/memory-event.schema.json, shared/schemas/validate-memory-event.mjs, shared/schemas/test/memory-event.test.mjs
+- VALIDATIONS RUN: `node --test shared/schemas/test/memory-event.test.mjs` exit 0 (12/12)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: deskagent scaffold (Tauri 2 + React + TS)
+- FILES CHANGED: apps/deskagent/ (package.json, tsconfig, vite.config.ts, index.html, Cargo.toml workspace, src-tauri/{Cargo.toml, build.rs, tauri.conf.json, capabilities/default.json, icons/*, src/{main,lib}.rs}, src/{main,App,styles.css}, src/lib/{types,sessions,memory,approvals,bridge}.ts, src/components/{ChatWindow,SessionList,MemoryExplorer,PersonaCard,ApprovalCard}.tsx, scripts/gen-icons.mjs, README.md)
+- VALIDATIONS RUN: `npm test --prefix apps/deskagent` 10/10; `npm run build` (tsc + vite) exit 0; `cargo check` workspace exit 0
+- EXIT CODES: 0 / 0 / 0
+- Lock verify: PASS
+
+### Task done: memory store (SQLite + embeddings, encrypted, export/delete)
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/{store,encrypt,embed}.rs
+- VALIDATIONS RUN: `cargo test` store 7/7, encrypt 4/4, embed 3/3; ciphertext ≠ plaintext verified in DB; export/wipe tested
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: capture pipeline
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/capture.rs (+ sessions.rs glue)
+- VALIDATIONS RUN: `cargo test` capture 4/4 — fixture conversation → episodes + 3 proposals (2 semantic + 1 procedural), max-20 cap honored, missing-session guard
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: consolidation & persona
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/consolidation.rs
+- VALIDATIONS RUN: `cargo test` consolidation 5/5 — persona regen from approved memories, dedupe merges exact+near dups, conflict detection on opposite polarity, decay drops stale, regen-due at 50
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: hybrid retrieval
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/retrieval.rs
+- VALIDATIONS RUN: `cargo test` retrieval 5/5 — scoped hits (project memory does not leak), rejected/pending excluded, strict injection budget, kind filter
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: propose-to-remember approval cards
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/approvals.rs
+- VALIDATIONS RUN: `cargo test` approvals 5/5 — pending card creation, approve (+0.1), reject (−0.1), history
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: memory UX (explorer + persona card)
+- FILES CHANGED: apps/deskagent/src/components/{MemoryExplorer,PersonaCard,ApprovalCard,ChatWindow,SessionList}.tsx, src/lib/{memory,approvals}.ts, src/App.tsx
+- VALIDATIONS RUN: `npm run build` exit 0; `npm test` lib logic 10/10 (filter/group/citations/confidence/approval transitions)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+## Phase 5 post-phase
+
+**Phase status:** COMPLETE (2026-08-15)
+- VALIDATE hook: `bash scripts/plan-lock.sh verify` exit 0 · `npm test` exit 0 (10/10) · `cargo check` exit 0
+- Exit criteria met: memory schema validated; store encrypted + deletable; pipeline extracts memories from a fixture conversation; persona regenerates; retrieval returns scoped hits; memory writes require approval; explorer and persona card render
+- Handoff: `records/phase-5-handoff.md` — 8/8 tasks, no blocked gates
+
+## Phase 6: DeskAgent — runtime, skills, sandbox
+
 **Phase status:** PENDING
 **Mirrored tasks (from PHASES.md; checkboxes live in PHASES.md):**
-- [ ] Create `shared/schemas/memory-event.schema.json`: four memory kinds (episodic, semantic, procedural, working) with sources, confidence, timestamps, and project scope; include validation tests.
-- [ ] Scaffold `apps/deskagent` (Tauri 2 + React + TypeScript). Window shell, chat UI, session persistence (SQLite).
-- [ ] Implement memory store (SQLite + local embeddings via sqlite-vec/fastembed-rs): episodic log, semantic facts, procedural records, working context; encrypted at rest; export/delete APIs.
-- [ ] Implement capture pipeline: every conversation appended as raw episodes; extraction pass distills facts/preferences every N turns (default 5, max 20 memories per pass).
-- [ ] Implement consolidation & persona: regenerate the persona model every N new memories (default 50); dedupe + conflict detection + decay; reflection on local models by default, per-session opt-in cloud for heavy passes (DEC-0005, DEC-0009).
-- [ ] Implement hybrid retrieval: keyword + embedding recall (RRF fusion) with strict injection budget; companion-level + per-project scoping (both scopes per DEC-0009).
-- [ ] Implement propose-to-remember approval cards: every memory write routes through the sandbox approval system; approvals and rejections recorded as learning signal.
-- [ ] Implement memory UX: memory explorer (timeline/facts/projects — browse, edit, pin, delete, export) and persona card view.
-- Exit criteria: memory schema validated; store encrypted and deletable; pipeline extracts memories from a fixture conversation; persona regenerates; retrieval returns scoped hits; memory writes require approval; explorer and persona card render.
+- [ ] Implement runtime layer: Ollama/llama.cpp backend adapter + Metal path on Apple Silicon (TurboFieldfare-compatible); model registry.
+- [ ] Implement model picker consuming BenchKit data (`shared/lib/will-it-run.mjs`): shows "runs on your machine" per model; offline fallback to bundled dataset.
+- [ ] Implement skill integration: install/update skills from SkillHub registry in-app (manifest spec + lockfile format); skills surface as procedural memory.
+- [ ] Implement action sandbox: tool calls render as approval cards; risky actions (shell, file writes, network) require click-to-approve; full undo log (shared with memory-write approvals).
+- [ ] Wire memory into conversation: persona + scoped memories injected into chat context; "I remember…" citations with sources.
+- [ ] Add voice input path (Whisper/WebRTC stub acceptable at P0) and a scheduled-tasks placeholder.
+- Exit criteria: app chats with a local model; picker reflects BenchKit data; agent recalls facts/preferences across sessions with citations; skills install and invoke; risky actions and memory writes blocked until approved; undo log records actions.

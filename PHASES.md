@@ -97,16 +97,16 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Scaffold `apps/slopgate-dash` (Next.js): per-repo score history + trend line (reads check artifacts; optional hosted API later).
 - **Exit criteria:** rule pack passes fixture tests; sloppy fixture scores high and clean low; action fails CI at threshold; dashboard renders a trend from a recorded artifact.
 
-## Phase 5: DeskAgent — self-memory core <!-- PENDING --> <!-- DEPENDS_ON: Phase 4 -->
+## Phase 5: DeskAgent — self-memory core <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 4 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && cd apps/deskagent && npm test && cargo check -->
-- [ ] Create `shared/schemas/memory-event.schema.json`: four memory kinds (episodic, semantic, procedural, working) with sources, confidence, timestamps, and project scope; include validation tests.
-- [ ] Scaffold `apps/deskagent` (Tauri 2 + React + TypeScript). Window shell, chat UI, session persistence (SQLite).
-- [ ] Implement memory store (SQLite + local embeddings via sqlite-vec/fastembed-rs): episodic log, semantic facts, procedural records, working context; encrypted at rest; export/delete APIs.
-- [ ] Implement capture pipeline: every conversation appended as raw episodes; extraction pass distills facts/preferences every N turns (default 5, max 20 memories per pass).
-- [ ] Implement consolidation & persona: regenerate the persona model every N new memories (default 50); dedupe + conflict detection + decay; reflection on local models by default, per-session opt-in cloud for heavy passes (DEC-0005, DEC-0009).
-- [ ] Implement hybrid retrieval: keyword + embedding recall (RRF fusion) with strict injection budget; companion-level + per-project scoping (both scopes per DEC-0009).
-- [ ] Implement propose-to-remember approval cards: every memory write routes through the sandbox approval system; approvals and rejections recorded as learning signal.
-- [ ] Implement memory UX: memory explorer (timeline/facts/projects — browse, edit, pin, delete, export) and persona card view.
+- [x] Create `shared/schemas/memory-event.schema.json`: four memory kinds (episodic, semantic, procedural, working) with sources, confidence, timestamps, and project scope; include validation tests.
+- [x] Scaffold `apps/deskagent` (Tauri 2 + React + TypeScript). Window shell, chat UI, session persistence (SQLite).
+- [x] Implement memory store (SQLite + local embeddings via sqlite-vec/fastembed-rs): episodic log, semantic facts, procedural records, working context; encrypted at rest; export/delete APIs.
+- [x] Implement capture pipeline: every conversation appended as raw episodes; extraction pass distills facts/preferences every N turns (default 5, max 20 memories per pass).
+- [x] Implement consolidation & persona: regenerate the persona model every N new memories (default 50); dedupe + conflict detection + decay; reflection on local models by default, per-session opt-in cloud for heavy passes (DEC-0005, DEC-0009).
+- [x] Implement hybrid retrieval: keyword + embedding recall (RRF fusion) with strict injection budget; companion-level + per-project scoping (both scopes per DEC-0009).
+- [x] Implement propose-to-remember approval cards: every memory write routes through the sandbox approval system; approvals and rejections recorded as learning signal.
+- [x] Implement memory UX: memory explorer (timeline/facts/projects — browse, edit, pin, delete, export) and persona card view.
 - **Exit criteria:** memory schema validated; store encrypted and deletable; pipeline extracts memories from a fixture conversation; persona regenerates; retrieval returns scoped hits; memory writes require approval; explorer and persona card render.
 
 ## Phase 6: DeskAgent — runtime, skills, sandbox <!-- PENDING --> <!-- DEPENDS_ON: Phase 5 -->

@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capability for the main DeskAgent window: core commands only (local-first, no remote calls).","local":true,"windows":["main"],"permissions":["core:default"]}}

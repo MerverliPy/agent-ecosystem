@@ -1,0 +1,10 @@
+# DeskAgent Cargo workspace — the Tauri shell (src-tauri) plus the pure memory core
+# (crates/deskagent-core). `cargo check` / `cargo test` run from apps/deskagent cover both.
+[workspace]
+resolver = "2"
+members = ["src-tauri", "src-tauri/crates/deskagent-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
