@@ -535,3 +535,8 @@ echo stub. That code gap is now fixed by this review's change set. No plan chang
 required (code only), but the human may want a `scripts/plan-lock.sh propose` to record
 this reconciliation in the acceptance narrative, or to explicitly accept the fix as the
 satisfaction of the DoD.
+
+## CHANGE REQUEST <!-- REQUEST_OPEN -->
+- Proposed: 2026-08-15T10:05:24Z
+- Reason: Reconcile Milestone 1 acceptance wording: the Phase 6 DoD claimed the app chats with a local model, but the shipped app was an echo stub. Adversarial review commit wired chat_complete into the app UI and resolved the gap. This change request records that the code fix, not the original claim, satisfies the DoD.
+- Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "Reconcile Milestone 1 acceptance wording: the Phase 6 DoD claimed the app chats with a local model, but the shipped app was an echo stub. Adversarial review commit wired chat_complete into the app UI and resolved the gap. This change request records that the code fix, not the original claim, satisfies the DoD."'.
