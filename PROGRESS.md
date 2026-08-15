@@ -84,18 +84,70 @@
 - EXIT CODES: 0
 - Lock verify: PASS
 
+## Phase 2: BenchKit — benchmark data, calculator, and site
+
+**Phase status:** COMPLETE (2026-08-14)
+**Started:** 2026-08-14
+**Notes:**
+- Dataset seeded: 7 rows, 5 sources (kimi-k3-in-c ×2 configs + 2 quant-study rows, warp, turbo-fieldfare, MiniMax-H3 sglang, h3.c) — every row has `source_url` (DEC-0006). Real numbers: Kimi K3 0.088 tps @ 127.9 GB peak; warp 0.6 tps on 64 GB MBP; KDA constant 626 MB KV; KV 2.37 MB/pos; int8 ≈ 1% / int4 ≈ 17% error. Nulls where unpublished — never fabricated.
+- Schema refined: `tokens_per_sec` + `peak_ram_gb` relaxed to nullable for honest seeding.
+- Calculator `shared/lib/will-it-run.mjs`: MoE active-param handling, KDA constant-KV, quant tiers, streaming verdicts; 8/8 edge-case tests pass.
+- Site `apps/bench-site` (Next 15.5 / React 19, zero extra deps): searchable/sortable matrix, will-it-run widget, model detail pages + quant SVG charts; 10/10 static routes prerendered.
+- Runner skeleton `scripts/bench-run.ts`: hardware detect, times a command, parses tokens/s, appends `runner:local` rows. Peak-RAM capture = documented follow-up.
+- Fixes during execution: client/server module split (node:fs out of client bundle), Next 15 async params, nested-route path depth, runner typing.
+
+### Task done: Seed benchmarks.jsonl
+- FILES CHANGED: shared/datasets/benchmarks.jsonl +7 rows
+- VALIDATIONS RUN: `node shared/datasets/validate-dataset.mjs` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: validate-dataset.mjs
+- FILES CHANGED: shared/datasets/validate-dataset.mjs +1
+- VALIDATIONS RUN: `node shared/datasets/validate-dataset.mjs` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: will-it-run.mjs calculator
+- FILES CHANGED: shared/lib/will-it-run.mjs +1
+- VALIDATIONS RUN: `node --test shared/lib/test/will-it-run.test.mjs` exit 0 (8/8)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: bench-site scaffold + matrix
+- FILES CHANGED: apps/bench-site/ (package.json, tsconfig, next.config, app/, components/matrix.tsx, lib/types.ts, lib/benchmarks.ts, globals.css)
+- VALIDATIONS RUN: `npm run build` exit 0 (10 static routes)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: model detail pages + quant charts
+- FILES CHANGED: apps/bench-site/app/models/[slug]/page.tsx, components/quant-chart.tsx
+- VALIDATIONS RUN: `npm run build` (7 model slugs generated)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: bench-run.ts runner skeleton
+- FILES CHANGED: apps/bench-site/scripts/bench-run.ts +1
+- VALIDATIONS RUN: `node --experimental-strip-types scripts/bench-run.ts --help` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: calculator edge-case tests
+- FILES CHANGED: shared/lib/test/will-it-run.test.mjs +1 (8 tests)
+- VALIDATIONS RUN: `npm test` exit 0 (calculator + dataset)
+- EXIT CODES: 0
+- Lock verify: PASS
+
 ---
 
 ## CHANGE REQUEST <!-- REQUEST_CLOSED -->
 - Proposed: 2026-08-14 — DeskAgent v2 amendment (approved in review)
-- Status: **APPROVED by human 2026-08-14** — `approve` ceremony completed, re-locked at content_sha256=ad23c2aa…; awaiting the amendment commit.
+- Status: **APPROVED by human 2026-08-14** — `approve` ceremony completed, re-locked at content_sha256=ad23c2aa…; amendment committed (dca7718).
 
-## CHANGE REQUEST <!-- REQUEST_OPEN -->
-- Proposed: 2026-08-14T21:38:28Z
-- Reason: DeskAgent v2 amendment (approved in review): reframe DeskAgent as a personal agent with self-memory — companion + project memory scopes, local-first storage with per-session opt-in cloud reflection, every memory write gated by an approval card. Split Phase 5 into Phase 5 (self-memory core) + Phase 6 (runtime/skills/sandbox); renumber old Phase 6 (synergies) to Phase 7; add locked constraint DEC-0009; update Definition of Done. BenchKit, SkillHub, SlopGate scope unchanged.
-- Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "DeskAgent v2 amendment (approved in review): reframe DeskAgent as a personal agent with self-memory — companion + project memory scopes, local-first storage with per-session opt-in cloud reflection, every memory write gated by an approval card. Split Phase 5 into Phase 5 (self-memory core) + Phase 6 (runtime/skills/sandbox); renumber old Phase 6 (synergies) to Phase 7; add locked constraint DEC-0009; update Definition of Done. BenchKit, SkillHub, SlopGate scope unchanged."'.
+## CHANGE REQUEST <!-- REQUEST_CLOSED -->
+- Proposed: 2026-08-14T21:38:28Z — DeskAgent v2 amendment
+- Status: APPROVED by human 2026-08-14 (re-locked ad23c2aa…, committed dca7718).
 
-## CHANGE REQUEST <!-- REQUEST_OPEN -->
-- Proposed: 2026-08-15T01:16:08Z
-- Reason: Update PHASES.md META repository field: repo is now live at MerverliPy/agent-ecosystem (was 'local, unregistered remote'). Cosmetic metadata only, no scope change.
-- Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "Update PHASES.md META repository field: repo is now live at MerverliPy/agent-ecosystem (was 'local, unregistered remote'). Cosmetic metadata only, no scope change."'.
+## CHANGE REQUEST <!-- REQUEST_CLOSED -->
+- Proposed: 2026-08-15T01:16:08Z — META repository field update
+- Status: APPROVED by human 2026-08-15 (re-locked 040ca814…, committed 2b4da29).

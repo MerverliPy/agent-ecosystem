@@ -64,15 +64,15 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Lock the plan: run `scripts/plan-lock.sh lock` (records baseline hash). Confirm `verify` passes.
 - **Exit criteria:** repo green; hooks enforce; both draft schemas/specs exist; lock active.
 
-## Phase 2: BenchKit — benchmark data, calculator, and site <!-- PENDING --> <!-- DEPENDS_ON: Phase 1 -->
+## Phase 2: BenchKit — benchmark data, calculator, and site <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 1 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && cd apps/bench-site && npm run build && npm test -->
-- [ ] Seed `shared/datasets/benchmarks.jsonl` from published sources: kimi-k3-in-c (2.78T params, 3.7% active, 8.24GB RAM, 1.56TB disk, MXFP4, int8≈1% error / int4≈17% error), sqliteai/warp (expert streaming from NVMe), turbo-fieldfare (Gemma 4 26B-A4B, ~2GB RAM, M-series), MiniMax-H3. Every row has `source_url`.
-- [ ] Write `shared/datasets/validate-dataset.mjs`: parses and validates every row against the JSON schema; `npm test` fails on invalid rows.
-- [ ] Implement `shared/lib/will-it-run.mjs` calculator: RAM estimate = weights + KV cache + overhead; speed estimate from memory bandwidth × active params; returns fit verdict (fits/streams-needed/no-fit) with assumptions listed.
-- [ ] Scaffold `apps/bench-site` (Next.js + TypeScript). Implement searchable matrix page: filters for RAM, hardware, runtime, quantization; sortable columns; "Will it run?" calculator widget wired to the dataset.
-- [ ] Add model detail pages with quantization-quality chart data (error vs. budget) from the seeded study numbers.
-- [ ] Implement `apps/bench-site/scripts/bench-run.ts` runner skeleton: hardware detection (RAM, CPU, GPU, OS), measures tokens/sec and peak RAM against a local runtime (Ollama/llama.cpp), appends a `source:runner` row.
-- [ ] Add project-level tests for calculator edge cases (MoE active-param handling, quantization tiers, streaming).
+- [x] Seed `shared/datasets/benchmarks.jsonl` from published sources: kimi-k3-in-c (2.78T params, 3.7% active, 8.24GB RAM, 1.56TB disk, MXFP4, int8≈1% error / int4≈17% error), sqliteai/warp (expert streaming from NVMe), turbo-fieldfare (Gemma 4 26B-A4B, ~2GB RAM, M-series), MiniMax-H3. Every row has `source_url`.
+- [x] Write `shared/datasets/validate-dataset.mjs`: parses and validates every row against the JSON schema; `npm test` fails on invalid rows.
+- [x] Implement `shared/lib/will-it-run.mjs` calculator: RAM estimate = weights + KV cache + overhead; speed estimate from memory bandwidth × active params; returns fit verdict (fits/streams-needed/no-fit) with assumptions listed.
+- [x] Scaffold `apps/bench-site` (Next.js + TypeScript). Implement searchable matrix page: filters for RAM, hardware, runtime, quantization; sortable columns; "Will it run?" calculator widget wired to the dataset.
+- [x] Add model detail pages with quantization-quality chart data (error vs. budget) from the seeded study numbers.
+- [x] Implement `apps/bench-site/scripts/bench-run.ts` runner skeleton: hardware detection (RAM, CPU, GPU, OS), measures tokens/sec and peak RAM against a local runtime (Ollama/llama.cpp), appends a `source:runner` row.
+- [x] Add project-level tests for calculator edge cases (MoE active-param handling, quantization tiers, streaming).
 - **Exit criteria:** dataset validated; calculator matches all seeded rows within tolerance; site builds and passes tests; runner runs end-to-end on at least one local model.
 
 ## Phase 3: SkillHub — manifest, CLI, registry, site <!-- PENDING --> <!-- DEPENDS_ON: Phase 2 -->
