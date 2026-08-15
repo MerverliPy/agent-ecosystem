@@ -27,8 +27,11 @@
 
 ---
 
-## CHANGE REQUESTS
+## CHANGE REQUEST <!-- REQUEST_CLOSED -->
+- Proposed: 2026-08-14 — DeskAgent v2 amendment (approved in review)
+- Status: **APPROVED by human 2026-08-14** — `approve` ceremony completed, re-locked at content_sha256=ad23c2aa…; awaiting the amendment commit.
 
-_Change requests are appended here by `scripts/plan-lock.sh propose "<reason>"`. Mark a request closed by
-changing its `<!-- REQUEST_OPEN -->` tag to `<!-- REQUEST_CLOSED -->` and noting the approval — only a human
-may approve; agents must never close their own requests._
+## CHANGE REQUEST <!-- REQUEST_OPEN -->
+- Proposed: 2026-08-14T21:38:28Z
+- Reason: DeskAgent v2 amendment (approved in review): reframe DeskAgent as a personal agent with self-memory — companion + project memory scopes, local-first storage with per-session opt-in cloud reflection, every memory write gated by an approval card. Split Phase 5 into Phase 5 (self-memory core) + Phase 6 (runtime/skills/sandbox); renumber old Phase 6 (synergies) to Phase 7; add locked constraint DEC-0009; update Definition of Done. BenchKit, SkillHub, SlopGate scope unchanged.
+- Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "DeskAgent v2 amendment (approved in review): reframe DeskAgent as a personal agent with self-memory — companion + project memory scopes, local-first storage with per-session opt-in cloud reflection, every memory write gated by an approval card. Split Phase 5 into Phase 5 (self-memory core) + Phase 6 (runtime/skills/sandbox); renumber old Phase 6 (synergies) to Phase 7; add locked constraint DEC-0009; update Definition of Done. BenchKit, SkillHub, SlopGate scope unchanged."'.

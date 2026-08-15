@@ -11,7 +11,7 @@ generated_from:
   - Local inference research: kimi-k3-in-c, sqliteai/warp, turbo-fieldfare, MiniMax-H3
   - Anti-slop research: dmmulroy/anti-slop, anthropics/claude-code-security-review, tagore
   - Conventions: phases-creator SKILL.md, phase-executor SKILL.md
-locked_constraints: DEC-0001, DEC-0002, DEC-0003, DEC-0004, DEC-0005, DEC-0006, DEC-0007, DEC-0008
+locked_constraints: DEC-0001, DEC-0002, DEC-0003, DEC-0004, DEC-0005, DEC-0006, DEC-0007, DEC-0008, DEC-0009
 active_milestone: Milestone 1 — Cross-project synergies (BenchKit, SkillHub, SlopGate, DeskAgent)
 milestone_state: ACCEPTED
 next_action: Phase 1 — Recon, scaffold, and lock activation
@@ -39,13 +39,14 @@ This file is **content-locked**. Per DEC-0003:
 | DEC-0006 | BenchKit data integrity: every benchmark row must link to an attributable source (repo README, paper, or runner log). No paid placement, no editorial ranking by sponsor. |
 | DEC-0007 | Build order: Phase N depends on Phase N-1. No scope creep beyond tasks listed below. A task may only be added by the approval ceremony. |
 | DEC-0008 | The plan lock is non-negotiable: agents must never bypass `plan-lock.sh` (no manual `PLAN.lock` edits, no `--force`). |
+| DEC-0009 | DeskAgent memory is local-first and user-owned: stored locally, encrypted at rest, exportable, deletable, and never silently written — every memory write requires an approval card. Reflection runs on local models by default; cloud reflection is per-session opt-in. |
 
 # Build Order Rationale
 
 BenchKit first: zero dependencies, 2-week win, produces the dataset the other products consume.
 SkillHub second: the primary product, needs BenchKit's credibility data for its verified badges.
 SlopGate third: shares static-analysis muscle with SkillHub's security scanner and reuses the same community.
-DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spec (marketplace).
+DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spec (marketplace). Reframed as a personal agent with a self-memory system (companion + project scopes) — the moat asset — so it ships after the data, skills, and scanning layers it builds on.
 
 ---
 
@@ -96,17 +97,29 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [ ] Scaffold `apps/slopgate-dash` (Next.js): per-repo score history + trend line (reads check artifacts; optional hosted API later).
 - **Exit criteria:** rule pack passes fixture tests; sloppy fixture scores high and clean low; action fails CI at threshold; dashboard renders a trend from a recorded artifact.
 
-## Phase 5: DeskAgent — consumer local-first agent harness <!-- PENDING --> <!-- DEPENDS_ON: Phase 4 -->
+## Phase 5: DeskAgent — self-memory core <!-- PENDING --> <!-- DEPENDS_ON: Phase 4 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && cd apps/deskagent && npm test && cargo check -->
+- [ ] Create `shared/schemas/memory-event.schema.json`: four memory kinds (episodic, semantic, procedural, working) with sources, confidence, timestamps, and project scope; include validation tests.
 - [ ] Scaffold `apps/deskagent` (Tauri 2 + React + TypeScript). Window shell, chat UI, session persistence (SQLite).
-- [ ] Implement runtime layer: Ollama/llama.cpp backend adapter + Metal path on Apple Silicon (TurboFieldfare-compatible); model registry.
-- [ ] Implement model picker that consumes BenchKit data (`shared/lib/will-it-run.mjs`): shows "runs on your machine ✅ 2GB / ✅ 8GB / needs more" per model; offline fallback to bundled dataset.
-- [ ] Implement skill integration: install/update skills from SkillHub registry in-app (uses manifest spec + lockfile format); per-harness "current skills" view.
-- [ ] Implement action sandbox: every tool call renders as an approval card; risky actions (shell, file writes, network) require click-to-approve; full undo log.
-- [ ] Add voice input path (Whisper/WebRTC stub acceptable at P0) and a scheduled-tasks placeholder.
-- **Exit criteria:** app launches; chat works with a local model; picker reflects BenchKit data; a skill installs from the registry and is invokable; risky actions blocked until approved; undo log records actions.
+- [ ] Implement memory store (SQLite + local embeddings via sqlite-vec/fastembed-rs): episodic log, semantic facts, procedural records, working context; encrypted at rest; export/delete APIs.
+- [ ] Implement capture pipeline: every conversation appended as raw episodes; extraction pass distills facts/preferences every N turns (default 5, max 20 memories per pass).
+- [ ] Implement consolidation & persona: regenerate the persona model every N new memories (default 50); dedupe + conflict detection + decay; reflection on local models by default, per-session opt-in cloud for heavy passes (DEC-0005, DEC-0009).
+- [ ] Implement hybrid retrieval: keyword + embedding recall (RRF fusion) with strict injection budget; companion-level + per-project scoping (both scopes per DEC-0009).
+- [ ] Implement propose-to-remember approval cards: every memory write routes through the sandbox approval system; approvals and rejections recorded as learning signal.
+- [ ] Implement memory UX: memory explorer (timeline/facts/projects — browse, edit, pin, delete, export) and persona card view.
+- **Exit criteria:** memory schema validated; store encrypted and deletable; pipeline extracts memories from a fixture conversation; persona regenerates; retrieval returns scoped hits; memory writes require approval; explorer and persona card render.
 
-## Phase 6: Synergies, validation, and launch <!-- PENDING --> <!-- DEPENDS_ON: Phase 5 -->
+## Phase 6: DeskAgent — runtime, skills, sandbox <!-- PENDING --> <!-- DEPENDS_ON: Phase 5 -->
+<!-- VALIDATE: bash scripts/plan-lock.sh verify && cd apps/deskagent && npm test && cargo check -->
+- [ ] Implement runtime layer: Ollama/llama.cpp backend adapter + Metal path on Apple Silicon (TurboFieldfare-compatible); model registry.
+- [ ] Implement model picker consuming BenchKit data (`shared/lib/will-it-run.mjs`): shows "runs on your machine" per model; offline fallback to bundled dataset.
+- [ ] Implement skill integration: install/update skills from SkillHub registry in-app (manifest spec + lockfile format); skills surface as procedural memory.
+- [ ] Implement action sandbox: tool calls render as approval cards; risky actions (shell, file writes, network) require click-to-approve; full undo log (shared with memory-write approvals).
+- [ ] Wire memory into conversation: persona + scoped memories injected into chat context; "I remember…" citations with sources.
+- [ ] Add voice input path (Whisper/WebRTC stub acceptable at P0) and a scheduled-tasks placeholder.
+- **Exit criteria:** app chats with a local model; picker reflects BenchKit data; agent recalls facts/preferences across sessions with citations; skills install and invoke; risky actions and memory writes blocked until approved; undo log records actions.
+
+## Phase 7: Synergies, validation, and launch <!-- PENDING --> <!-- DEPENDS_ON: Phase 6 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && bash scripts/run-all-checks.sh && bash scripts/plan-lock.sh status -->
 - [ ] Create `scripts/run-all-checks.sh`: runs every product's test suite, lints, and schema/dataset validation; single exit code.
 - [ ] Wire BenchKit API into DeskAgent model picker (live fetch with cached fallback).
@@ -126,5 +139,5 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - BenchKit: ≥ 4 seeded hardware/model configurations, calculator matches them.
 - SkillHub: install/search/update/verify work end-to-end; scanner flags all malicious fixtures.
 - SlopGate: fixtures ordered correctly; action gates CI at threshold.
-- DeskAgent: launches, chats locally, installs a skill, enforces approvals.
+- DeskAgent: launches and chats locally with memory — recalls facts/preferences across sessions; persona card reviewable/correctable; memory browsable/exportable/deletable; memory writes approval-gated; installs a skill; enforces approvals.
 - `plan-lock.sh verify` passes at every checkpoint; PROGRESS.md contains per-phase handoffs.
