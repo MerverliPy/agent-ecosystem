@@ -21,12 +21,48 @@ fn keyfile_path(app_data: &PathBuf) -> PathBuf {
     app_data.join("deskagent.key")
 }
 
-/// Determine the at-rest encryption key: DESKAGENT_PASSPHRASE env, else a generated
-/// keyfile (0600) in app data. Returns None to run unencrypted (documented fallback).
+/// Persisted passphrase salt, so the same DESKAGENT_PASSPHRASE derives the same key
+/// across launches (DEC-0009). Stored hex-encoded in the app-data dir next to the
+/// keyfile; written once and reused forever.
+fn passphrase_salt_path(app_data: &PathBuf) -> PathBuf {
+    app_data.join("deskagent.salt")
+}
+
+/// Load the persisted passphrase salt, or create and persist a fresh one on first run.
+fn passphrase_salt(app_data: &PathBuf) -> Vec<u8> {
+    let salt_path = passphrase_salt_path(app_data);
+    if let Ok(hex) = std::fs::read_to_string(&salt_path) {
+        let trimmed = hex.trim();
+        if trimmed.len() == 32 {
+            if let Some(salt) = hex_to_bytes(trimmed) {
+                return salt;
+            }
+        }
+    }
+    let salt = deskagent_core::encrypt::random_salt();
+    let hex: String = salt.iter().map(|b| format!("{b:02x}")).collect();
+    if let Ok(mut f) = std::fs::File::create(&salt_path) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
+        use std::io::Write;
+        let _ = f.write_all(hex.as_bytes());
+    }
+    salt
+}
+
+fn hex_to_bytes(hex: &str) -> Option<Vec<u8>> {
+    hex.as_bytes()
+        .chunks(2)
+        .map(|c| u8::from_str_radix(std::str::from_utf8(c).ok()?, 16).ok())
+        .collect()
+}
+
+/// Determine the at-rest encryption key: DESKAGENT_PASSPHRASE env (with a persisted
+/// salt), else a generated keyfile (0600) in app data. Returns None to run unencrypted.
 fn resolve_key(app_data: &PathBuf) -> Option<[u8; 32]> {
     if let Ok(pass) = std::env::var("DESKAGENT_PASSPHRASE") {
         if !pass.is_empty() {
-            let salt = deskagent_core::encrypt::random_salt();
+            let salt = passphrase_salt(app_data);
             return Some(deskagent_core::encrypt::derive_key(&pass, &salt));
         }
     }
@@ -35,13 +71,11 @@ fn resolve_key(app_data: &PathBuf) -> Option<[u8; 32]> {
         if let Ok(hex) = std::fs::read_to_string(&keyfile) {
             let trimmed = hex.trim();
             if trimmed.len() == 64 {
-                let mut key = [0u8; 32];
-                for (i, b) in trimmed.as_bytes().chunks(2).enumerate() {
-                    if let Ok(byte) = u8::from_str_radix(std::str::from_utf8(b).ok()?, 16) {
-                        key[i] = byte;
-                    }
+                if let Some(bytes) = hex_to_bytes(trimmed) {
+                    let mut key = [0u8; 32];
+                    key.copy_from_slice(&bytes);
+                    return Some(key);
                 }
-                return Some(key);
             }
         }
     }
@@ -66,13 +100,16 @@ fn app_data_dir(app: &tauri::AppHandle) -> PathBuf {
 
 fn open_store(app_data: &PathBuf) -> MemoryStore {
     let db_path = app_data.join("deskagent.db");
-    let config = StoreConfig {
-        path: db_path.to_string_lossy().into_owned(),
-        encrypt: true,
-    };
     match resolve_key(app_data) {
-        Some(key) => MemoryStore::open_encrypted(config, key).expect("open encrypted store"),
-        None => MemoryStore::open(config).expect("open store"),
+        Some(key) => {
+            let config = StoreConfig { path: db_path.to_string_lossy().into_owned(), encrypt: true };
+            MemoryStore::open_encrypted(config, key).expect("open encrypted store")
+        }
+        None => {
+            // No key could be resolved (keyfile creation failed); documented plaintext fallback.
+            let config = StoreConfig { path: db_path.to_string_lossy().into_owned(), encrypt: false };
+            MemoryStore::open(config).expect("open store")
+        }
     }
 }
 

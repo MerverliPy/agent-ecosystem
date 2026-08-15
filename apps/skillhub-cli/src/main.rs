@@ -301,7 +301,7 @@ fn run_quality_check(dir: &std::path::Path) -> Option<serde_json::Value> {
     let out = std::process::Command::new("node")
         .arg("--experimental-strip-types")
         .arg(&cli)
-        .arg("scan")
+        .arg("score")
         .arg(dir)
         .arg("--json")
         .output()
@@ -315,13 +315,14 @@ fn run_quality_check(dir: &std::path::Path) -> Option<serde_json::Value> {
 fn print_quality(dir: &std::path::Path, report: Option<serde_json::Value>) {
     match report {
         Some(r) => {
-            let score = r["score"]
-                .as_object()
-                .and_then(|o| o.get("score"))
-                .or_else(|| r.get("score"))
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
-            let findings = r["findings"].as_array().map(|a| a.len()).unwrap_or(0);
+            // `slop score --json` emits score as a number and totalFindings as a count.
+            let score = r["score"].as_f64().or_else(|| {
+                r["score"].as_object().and_then(|o| o.get("score")).and_then(|v| v.as_f64())
+            }).unwrap_or(0.0);
+            let findings = r["totalFindings"]
+                .as_i64()
+                .or_else(|| r["findings"].as_array().map(|a| a.len() as i64))
+                .unwrap_or(0);
             println!("QUALITY: {} — slop score {:.0}/100 ({} finding(s))", dir.display(), score, findings);
         }
         None => println!("QUALITY: skipped — slopgate scanner unavailable (SKILLHUB_SLOPGATE_CLI or repo checkout + node required)"),

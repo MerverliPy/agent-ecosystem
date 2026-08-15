@@ -21,6 +21,21 @@ export default function App() {
   const [tab, setTab] = useState<"chat" | "memory" | "models" | "tasks">("chat");
   const [status, setStatus] = useState("loading…");
 
+  const refresh = async () => {
+    try {
+      const [m, a, p] = await Promise.all([
+        bridge.listMemories(),
+        bridge.listApprovals(),
+        bridge.getPersona(),
+      ]);
+      setMemories(m);
+      setApprovals(a);
+      setPersona(p);
+    } catch (err) {
+      setStatus(`bridge error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -53,10 +68,22 @@ export default function App() {
 
   async function handleSend(content: string) {
     if (!active) return;
+    // Persist the user turn, then run the assistant turn through the (remembered)
+    // local model via chat_complete (deterministic fallback when offline, DEC-0005).
     const withUser = await bridge.appendMessage(active.id, "user", content);
-    // Assistant echo — Phase 6 wires the local model runtime here.
-    const withAssistant = await bridge.appendMessage(withUser.id, "assistant", `(model runtime lands in Phase 6)\n\n${content}`);
+    let withAssistant: Session;
+    try {
+      withAssistant = await bridge.chatComplete(withUser.id, content);
+    } catch (err) {
+      withAssistant = await bridge.appendMessage(
+        withUser.id,
+        "assistant",
+        `(runtime unavailable: ${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
     setSessions((prev) => sortSessions(prev.map((s) => (s.id === withAssistant.id ? withAssistant : s))));
+    // refresh memories/approvals/persona: chat may have enqueued new approval cards
+    refresh();
   }
 
   const pending = pendingCards(approvals);
@@ -98,7 +125,14 @@ export default function App() {
                 <h3>Approvals</h3>
                 {approvals.length === 0 && <p className="muted">No approval cards yet.</p>}
                 {approvals.map((c) => (
-                  <ApprovalCardView key={c.id} card={c} />
+                  <ApprovalCardView
+                    key={c.id}
+                    card={c}
+                    onDecide={async (cardId, approved) => {
+                      await bridge.decideApproval(cardId, approved);
+                      await refresh();
+                    }}
+                  />
                 ))}
               </div>
             </div>

@@ -5,6 +5,7 @@
 
 import type { ApprovalCard, MemoryEvent, Persona, Session } from "./types.ts";
 import { createSession, addMessage, newId, nowIso } from "./sessions.ts";
+import { applyConfidence, confidenceDelta } from "./approvals.ts";
 
 interface InvokeFn {
   (cmd: string, args?: Record<string, unknown>): Promise<unknown>;
@@ -46,6 +47,10 @@ export interface DeskAgentBridge {
   listMemories(): Promise<MemoryEvent[]>;
   listApprovals(): Promise<ApprovalCard[]>;
   getPersona(): Promise<Persona | null>;
+  decideApproval(cardId: string, approved: boolean): Promise<void>;
+  /** Run an assistant turn through the (remembered) local model, or deterministic
+   *  fallback when no runtime is configured. Returns the updated session. */
+  chatComplete(sessionId: string, userTurn: string): Promise<Session>;
 }
 
 function demoBridge(): DeskAgentBridge {
@@ -81,6 +86,27 @@ function demoBridge(): DeskAgentBridge {
     async getPersona() {
       return persona;
     },
+    async decideApproval(_cardId, approved) {
+      // demo: apply the learning signal locally and reflect it in the card list
+      const idx = approvals.findIndex((c) => c.id === _cardId);
+      if (idx < 0) return;
+      const card = approvals[idx];
+      if (card.status !== "pending") return;
+      approvals[idx] = {
+        ...card,
+        status: approved ? "approved" : "rejected",
+        event: card.event ? applyConfidence(card.event, confidenceDelta(approved ? "approved" : "rejected")) : undefined,
+      };
+      write(STORE_KEYS.approvals, approvals);
+    },
+    async chatComplete(_sessionId, userTurn) {
+      // demo: deterministic echo (no model runtime in the browser)
+      const i = sessions.findIndex((s) => s.id === _sessionId);
+      const updated = addMessage(sessions[i] ?? createSession(), "assistant", `(no model runtime in browser)\\n\\n${userTurn}`);
+      if (i >= 0) sessions[i] = updated;
+      write(STORE_KEYS.sessions, sessions);
+      return updated;
+    },
   };
 }
 
@@ -95,6 +121,11 @@ async function rustBridge(): Promise<DeskAgentBridge> {
     listMemories: async () => (await invoke("memory_list")) as MemoryEvent[],
     listApprovals: async () => (await invoke("approval_list")) as ApprovalCard[],
     getPersona: async () => (await invoke("persona_get")) as Persona | null,
+    decideApproval: async (cardId, approved) => {
+      await invoke("approval_decide", { cardId, approved });
+    },
+    chatComplete: async (sessionId, userTurn) =>
+      (await invoke("chat_complete", { sessionId, userTurn })) as Session,
   };
 }
 

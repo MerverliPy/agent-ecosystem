@@ -30,13 +30,19 @@ pub struct SkillManifest {
     pub permissions: Vec<String>,
 }
 
-/// Lockfile format — compatible with apps/skillhub-cli's skillhub.lock.json.
+/// DeskAgent's per-skill install record. Field names mirror the canonical
+/// skill-manifest spec (name, version, source, checksum, harness, installed_at);
+/// the `files` list is DeskAgent-specific and not part of the SkillHub CLI lockfile
+/// (which is a JSON array at the harness root — see apps/skillhub-cli/src/lockfile.rs).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillLock {
     pub name: String,
     pub version: String,
-    pub registry: String,
+    pub source: String,
+    pub harness: String,
     pub installed_at: String,
+    pub checksum: String,
+    #[serde(default)]
     pub files: Vec<String>,
 }
 
@@ -140,8 +146,10 @@ pub fn install_skill(
     let lock = SkillLock {
         name: manifest.name.clone(),
         version: manifest.version.clone(),
-        registry: registry.to_string(),
+        source: registry.to_string(),
+        harness: manifest.harnesses.first().cloned().unwrap_or_else(|| "unknown".into()),
         installed_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        checksum: checksum_of(&dir),
         files: written,
     };
     let lock_json = serde_json::to_string_pretty(&lock).map_err(|e| RuntimeError::Parse(e.to_string()))?;
@@ -241,8 +249,10 @@ pub fn install_from_dir(store: &MemoryStore, src: &Path, skills_dir: &Path) -> R
     let lock = SkillLock {
         name: manifest.name.clone(),
         version: manifest.version.clone(),
-        registry: "local".into(),
+        source: "local".into(),
+        harness: manifest.harnesses.first().cloned().unwrap_or_else(|| "unknown".into()),
         installed_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        checksum: checksum_of(&dir),
         files: written,
     };
     std::fs::write(dir.join("skillhub.lock.json"), serde_json::to_string_pretty(&lock).unwrap())
@@ -258,6 +268,31 @@ pub fn install_from_dir(store: &MemoryStore, src: &Path, skills_dir: &Path) -> R
 
 pub fn skills_dir_from(base: &Path) -> PathBuf {
     base.join("skills")
+}
+
+/// Simple content checksum of a skills dir (files in sorted path order). Used for the
+/// lockfile integrity field; not cryptographic-tamperproof, but stable for reinstall checks.
+fn checksum_of(dir: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    let mut paths: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            let is_lockfile = p.file_name().and_then(|n| n.to_str()) == Some("skillhub.lock.json");
+            if p.is_file() && !is_lockfile {
+                paths.push(p);
+            }
+        }
+    }
+    paths.sort();
+    let mut hasher = Sha256::new();
+    for p in paths {
+        hasher.update(p.file_name().and_then(|n| n.to_str()).unwrap_or("").as_bytes());
+        if let Ok(bytes) = std::fs::read(&p) {
+            hasher.update(bytes);
+        }
+    }
+    format!("{:x}", hasher.finalize())
 }
 
 #[cfg(test)]

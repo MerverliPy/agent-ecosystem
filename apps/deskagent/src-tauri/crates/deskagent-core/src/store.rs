@@ -155,6 +155,13 @@ pub struct MemoryStore {
 
 impl MemoryStore {
     pub fn open(config: StoreConfig) -> rusqlite::Result<Self> {
+        if config.encrypt {
+            // Encryption requires a key; callers must use open_encrypted. Rejecting the
+            // encrypt=true flag here prevents a silent-plaintext store.
+            return Err(rusqlite::Error::InvalidParameterName(
+                "config.encrypt=true requires open_encrypted(key)".into(),
+            ));
+        }
         let conn = if config.path == ":memory:" {
             Connection::open_in_memory()?
         } else {
@@ -170,7 +177,7 @@ impl MemoryStore {
     }
 
     pub fn open_encrypted(config: StoreConfig, key: [u8; 32]) -> rusqlite::Result<Self> {
-        let mut store = Self::open(config)?;
+        let mut store = Self::open(StoreConfig { path: config.path.clone(), encrypt: false })?;
         store.key = Some(key);
         Ok(store)
     }
@@ -287,13 +294,24 @@ impl MemoryStore {
         }
     }
 
-    fn decrypt_field(&self, stored: &str) -> String {
+    fn decrypt_field(&self, stored: &str) -> rusqlite::Result<String> {
         match &self.key {
-            None => stored.to_string(),
+            None => Ok(stored.to_string()),
             Some(key) => {
-                let payload: EncryptedRow = serde_json::from_str(stored).expect("stored payload");
-                crate::encrypt::decrypt_string(key, &payload.nonce, &payload.cipher)
-                    .expect("decrypt memory field")
+                let payload: EncryptedRow = serde_json::from_str(stored)
+                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        format!("invalid encrypted payload: {e}").into(),
+                    ))?;
+                crate::encrypt::decrypt_string(key, &payload.nonce, &payload.cipher).map_err(|e| {
+                    // A wrong key (e.g. changed passphrase) surfaces as an error, not a panic.
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        format!("decrypt failed (wrong key?): {e}").into(),
+                    )
+                })
             }
         }
     }
@@ -414,10 +432,19 @@ impl MemoryStore {
         }))
     }
 
-    /// DEC-0009 delete: wipe every memory and approval (the user owns the data).
+    /// DEC-0009 delete: wipe every memory and approval (the user owns the data). Also
+    /// clears the transcript (sessions/messages), action log, and undo log so no user
+    /// content survives a "delete my data" request.
     pub fn wipe_all(&self) -> rusqlite::Result<()> {
-        self.conn
-            .execute_batch("DELETE FROM memories; DELETE FROM approvals; DELETE FROM persona;")?;
+        self.conn.execute_batch(
+            "DELETE FROM memories;
+             DELETE FROM approvals;
+             DELETE FROM persona;
+             DELETE FROM actions;
+             DELETE FROM undo_log;
+             DELETE FROM messages;
+             DELETE FROM sessions;",
+        )?;
         Ok(())
     }
 
@@ -474,15 +501,24 @@ impl MemoryStore {
             "synthesis" => MemorySource::Synthesis,
             _ => MemorySource::Other,
         };
-        let scope_type = if scope_type == "project" {
-            ScopeType::Project
-        } else {
-            ScopeType::Companion
+        let scope_type = match scope_type.as_str() {
+            "project" => ScopeType::Project,
+            "companion" => ScopeType::Companion,
+            other => return Err(rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Text,
+                format!("unknown scope_type {other}").into(),
+            )),
         };
         let approval = match approval.as_str() {
             "pending" => ApprovalStatus::Pending,
+            "approved" => ApprovalStatus::Approved,
             "rejected" => ApprovalStatus::Rejected,
-            _ => ApprovalStatus::Approved,
+            other => return Err(rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Text,
+                format!("unknown approval {other}").into(),
+            )),
         };
         let embedding = embedding
             .map(|bytes| deserialize_vec_f32(&bytes))
@@ -491,8 +527,11 @@ impl MemoryStore {
         Ok(MemoryEvent {
             id,
             kind,
-            content: self.decrypt_field(&content_enc),
-            summary: summary_enc.map(|s| self.decrypt_field(&s)),
+            content: self.decrypt_field(&content_enc)?,
+            summary: match summary_enc {
+                Some(s) => Some(self.decrypt_field(&s)?),
+                None => None,
+            },
             source,
             confidence,
             created_at,

@@ -32,12 +32,18 @@ export function defaultMachine(): MachineSpec {
 export function evaluateRows(rows: BenchRow[], machine: MachineSpec): PickerEntry[] {
   return rows.map((row) => {
     const bits = row.quantization ? quantBits(row.quantization) : 4;
-    const est = estimate({ name: row.model, totalParamsB: 8, bitsPerWeight: bits }, machine);
+    // Use the row's real active-parameter count (or a conservative default) instead
+    // of a hardcoded 8B, so fit/speed math is not uniformly wrong for non-8B models.
+    const activeParamsB = row.active_params_b ?? 8;
+    const est = estimate({ name: row.model, totalParamsB: activeParamsB, bitsPerWeight: bits }, machine);
+    const verdict = row.peak_ram_gb != null
+      ? (row.peak_ram_gb <= machine.ramGb ? "fits" : est.verdict)
+      : est.verdict;
     return {
       model: row.model,
       runtime: row.runtime,
       hardwareLabel: row.hardware?.gpu ? `${row.hardware.cpu} / ${row.hardware.gpu}` : row.hardware?.cpu ?? "unknown",
-      verdict: row.peak_ram_gb != null && row.peak_ram_gb <= machine.ramGb ? "fits" : est.verdict,
+      verdict,
       ramNeededGb: row.peak_ram_gb ?? est.ramNeededGb,
       estTokensPerSec: row.tokens_per_sec ?? est.estTokensPerSec,
       measuredTokensPerSec: row.tokens_per_sec ?? null,
@@ -95,10 +101,12 @@ function toBenchRow(raw: Record<string, unknown>): BenchRow | null {
     quantization: (raw.quantization as string | null | undefined) ?? null,
     tokens_per_sec: (raw.tokens_per_sec as number | null | undefined) ?? null,
     peak_ram_gb: (raw.peak_ram_gb as number | null | undefined) ?? null,
+    active_params_b: (raw.active_params_b as number | null | undefined) ?? null,
+    disk_size_gb: (raw.disk_size_gb as number | null | undefined) ?? null,
     source_url: raw.source_url,
     hardware: {
       cpu: (h.cpu as string | undefined) ?? "unknown",
-      ram_gb: (h.ram_gb as number | undefined) ?? 0,
+      ram_gb: (h.ram_gb as number | null | undefined) ?? null,
       gpu: (h.gpu as string | null | undefined) ?? null,
       os: (h.os as string | null | undefined) ?? null,
     },

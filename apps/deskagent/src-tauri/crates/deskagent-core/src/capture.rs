@@ -58,10 +58,22 @@ pub fn capture_turn(
         embedding: None,
     };
     store.insert_memory(&episode)?;
+    // Advance the per-session turn counter so the extraction pass can fire on schedule.
+    if role == "user" {
+        increment_turn_counter(store, session_id)?;
+    }
     get_session(store, session_id)
 }
 
-/// Count turns since the last extraction pass (meta key per session).
+/// Increment the per-session user-turn counter (meta key).
+fn increment_turn_counter(store: &MemoryStore, session_id: &str) -> rusqlite::Result<()> {
+    let key = format!("extract_turns.{session_id}");
+    let next = turns_since_pass(store, session_id)? + 1;
+    store.set_meta(&key, &next.to_string())?;
+    Ok(())
+}
+
+/// Count user turns since the last extraction pass (meta key per session).
 pub fn turns_since_pass(store: &MemoryStore, session_id: &str) -> rusqlite::Result<i64> {
     let key = format!("extract_turns.{session_id}");
     Ok(store.meta(&key)?.and_then(|v| v.parse().ok()).unwrap_or(0))
@@ -141,8 +153,9 @@ pub fn run_extraction_pass(
     }
 
     let key = format!("extract_turns.{session_id}");
-    let next = turns_since_pass(store, session_id)? + 1;
-    store.set_meta(&key, &next.to_string())?;
+    // A pass just ran: reset the turn counter so the next pass fires after another
+    // `turns_per_pass` user turns (not accumulate forever).
+    store.set_meta(&key, "0")?;
     Ok(created)
 }
 
@@ -282,5 +295,29 @@ mod tests {
             project_path: None,
         };
         assert!(capture_turn(&s, "missing", "user", "hi", scope).unwrap().is_none());
+    }
+
+    #[test]
+    fn turn_counter_advances_and_resets_on_pass() {
+        // Regression test for the live-shell extraction trigger: capture_turn must
+        // advance the per-session turn counter, and run_extraction_pass must reset it
+        // (so the next pass fires after another N turns rather than accumulating).
+        let s = store();
+        let (session, _) = capture_conversation(&s, None, &[("user", "I prefer Rust for CLIs.")], 1).unwrap();
+        let scope = MemoryScope { scope_type: ScopeType::Companion, project_id: None, project_path: None };
+
+        assert_eq!(turns_since_pass(&s, &session.id).unwrap(), 0);
+
+        // one user turn advances the counter
+        capture_turn(&s, &session.id, "user", "I like tea.", scope.clone()).unwrap();
+        assert_eq!(turns_since_pass(&s, &session.id).unwrap(), 1);
+
+        // assistant turns must NOT advance it
+        capture_turn(&s, &session.id, "assistant", "ok", scope.clone()).unwrap();
+        assert_eq!(turns_since_pass(&s, &session.id).unwrap(), 1);
+
+        // running the pass resets the counter to zero
+        run_extraction_pass(&s, &session.id, DEFAULT_TURNS_PER_PASS, MAX_MEMORIES_PER_PASS).unwrap();
+        assert_eq!(turns_since_pass(&s, &session.id).unwrap(), 0);
     }
 }

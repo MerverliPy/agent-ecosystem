@@ -140,7 +140,7 @@ pub fn retrieve(store: &MemoryStore, query: &RetrievalQuery) -> rusqlite::Result
     for (id, score, via) in fused {
         if let Some(memory) = store.get_memory(&id)? {
             let chars = memory.content.chars().count() + 40; // +label overhead
-            if total_chars + chars > query.budget_chars && !hits.is_empty() {
+            if total_chars + chars > query.budget_chars {
                 truncated = true;
                 break;
             }

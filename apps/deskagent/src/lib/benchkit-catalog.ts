@@ -4,22 +4,24 @@
 //   node apps/deskagent/scripts/sync-catalog.mjs
 export interface BenchRow {
   model: string;
-  hardware: { cpu: string; ram_gb: number; gpu?: string | null; os?: string | null };
+  hardware: { cpu: string; ram_gb: number | null; gpu?: string | null; os?: string | null };
   runtime: string;
   quantization?: string | null;
   tokens_per_sec?: number | null;
   peak_ram_gb?: number | null;
+  active_params_b?: number | null;
+  disk_size_gb?: number | null;
   source_url: string;
 }
 
 export const BENCHKIT_CATALOG: BenchRow[] = [
-  {"model":"Kimi K3 (2.78T)","hardware":{"cpu":"x86-64 CPU (C99, no BLAS — README demo box)","ram_gb":224,"gpu":null,"os":"Linux"},"runtime":"kimi-k3-in-c","quantization":"MXFP4","tokens_per_sec":0.088,"peak_ram_gb":127.9,"source_url":"https://github.com/FareedKhan-dev/kimi-k3-in-c"},
-  {"model":"Kimi K3 (2.78T)","hardware":{"cpu":"Apple M-series (64 GB MacBook Pro)","ram_gb":64,"gpu":null,"os":"macOS"},"runtime":"warp","quantization":"MXFP4","tokens_per_sec":0.6,"peak_ram_gb":64,"source_url":"https://github.com/sqliteai/warp"},
-  {"model":"Gemma 4 26B-A4B","hardware":{"cpu":"Apple M-series (any, incl. 8 GB)","ram_gb":8,"gpu":null,"os":"macOS"},"runtime":"turbo-fieldfare","quantization":null,"tokens_per_sec":null,"peak_ram_gb":2,"source_url":"https://github.com/drumih/turbo-fieldfare"},
-  {"model":"MiniMax-H3 (Omni 33B dense + Qwen3-VL-32B encoder)","hardware":{"cpu":"n/a (GPU-only deployment, sglang Ulysses)","ram_gb":0,"gpu":"4x GPU","os":"Linux"},"runtime":"sglang","quantization":"BF16","tokens_per_sec":null,"peak_ram_gb":null,"source_url":"https://github.com/MiniMax-AI/MiniMax-H3"},
-  {"model":"MiniMax-H3 (Omni 33B)","hardware":{"cpu":"Apple Silicon (Metal; 45/50 layers option, ~10 GiB preview VAE)","ram_gb":0,"gpu":null,"os":"macOS"},"runtime":"h3.c (h3-metal)","quantization":"BF16","tokens_per_sec":null,"peak_ram_gb":null,"source_url":"https://github.com/antirez/h3.c"},
-  {"model":"Kimi K3 (2.78T) — int8 quantization study","hardware":{"cpu":"any (weight reconstruction study)","ram_gb":0,"gpu":null,"os":"n/a"},"runtime":"kimi-k3-in-c (study)","quantization":"int8 (study)","tokens_per_sec":null,"peak_ram_gb":null,"source_url":"https://github.com/FareedKhan-dev/kimi-k3-in-c (Part III: quantization error study)"},
-  {"model":"Kimi K3 (2.78T) — int4 quantization study","hardware":{"cpu":"any (weight reconstruction study)","ram_gb":0,"gpu":null,"os":"n/a"},"runtime":"kimi-k3-in-c (study)","quantization":"int4 (study)","tokens_per_sec":null,"peak_ram_gb":null,"source_url":"https://github.com/FareedKhan-dev/kimi-k3-in-c (Part III: quantization error study)"},
+  {"model":"Kimi K3 (2.78T)","hardware":{"cpu":"x86-64 CPU (C99, no BLAS — README demo box)","ram_gb":224,"gpu":null,"os":"Linux"},"runtime":"kimi-k3-in-c","quantization":"MXFP4","tokens_per_sec":0.088,"peak_ram_gb":127.9,"active_params_b":104,"disk_size_gb":1560,"source_url":"https://github.com/FareedKhan-dev/kimi-k3-in-c"},
+  {"model":"Kimi K3 (2.78T)","hardware":{"cpu":"Apple M-series (64 GB MacBook Pro)","ram_gb":64,"gpu":null,"os":"macOS"},"runtime":"warp","quantization":"MXFP4","tokens_per_sec":0.6,"peak_ram_gb":64,"active_params_b":104,"disk_size_gb":1560,"source_url":"https://github.com/sqliteai/warp"},
+  {"model":"Gemma 4 26B-A4B","hardware":{"cpu":"Apple M-series (any, incl. 8 GB)","ram_gb":8,"gpu":null,"os":"macOS"},"runtime":"turbo-fieldfare","quantization":null,"tokens_per_sec":null,"peak_ram_gb":2,"active_params_b":4,"disk_size_gb":null,"source_url":"https://github.com/drumih/turbo-fieldfare"},
+  {"model":"MiniMax-H3 (Omni 33B dense + Qwen3-VL-32B encoder)","hardware":{"cpu":"n/a (GPU-only deployment, sglang Ulysses)","ram_gb":null,"gpu":"4x GPU","os":"Linux"},"runtime":"sglang","quantization":"BF16","tokens_per_sec":null,"peak_ram_gb":null,"active_params_b":33,"disk_size_gb":null,"source_url":"https://github.com/MiniMax-AI/MiniMax-H3"},
+  {"model":"MiniMax-H3 (Omni 33B)","hardware":{"cpu":"Apple Silicon (Metal; 45/50 layers option, ~10 GiB preview VAE)","ram_gb":null,"gpu":null,"os":"macOS"},"runtime":"h3.c (h3-metal)","quantization":"BF16","tokens_per_sec":null,"peak_ram_gb":null,"active_params_b":33,"disk_size_gb":null,"source_url":"https://github.com/antirez/h3.c"},
+  {"model":"Kimi K3 (2.78T) — int8 quantization study","hardware":{"cpu":"any (weight reconstruction study)","ram_gb":null,"gpu":null,"os":"n/a"},"runtime":"kimi-k3-in-c (study)","quantization":"int8 (study)","tokens_per_sec":null,"peak_ram_gb":null,"active_params_b":104,"disk_size_gb":null,"source_url":"https://github.com/FareedKhan-dev/kimi-k3-in-c"},
+  {"model":"Kimi K3 (2.78T) — int4 quantization study","hardware":{"cpu":"any (weight reconstruction study)","ram_gb":null,"gpu":null,"os":"n/a"},"runtime":"kimi-k3-in-c (study)","quantization":"int4 (study)","tokens_per_sec":null,"peak_ram_gb":null,"active_params_b":104,"disk_size_gb":null,"source_url":"https://github.com/FareedKhan-dev/kimi-k3-in-c"},
 ];
 
 export const CATALOG_SOURCE = "shared/datasets/benchmarks.jsonl (DEC-0006)";
