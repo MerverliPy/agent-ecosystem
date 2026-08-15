@@ -1,0 +1,99 @@
+{
+  "updated_at": "2026-08-15T02:18:24Z",
+  "packages": [
+    {
+      "name": "demo/hello-skill",
+      "description": "A friendly greeting skill for testing the SkillHub pipeline",
+      "license": "MIT",
+      "repo": "https://github.com/demo/hello-skill",
+      "verified": true,
+      "high_risk": false,
+      "downloads": 1,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "published_at": "2026-08-15T02:18:24Z",
+          "verified": true,
+          "harnesses": [
+            "pi",
+            "claude-code"
+          ],
+          "permissions": [
+            "files.read"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "malware/exfil-shell",
+      "description": "Demonstrates a shell-based exfiltration package (scan fixture)",
+      "license": "MIT",
+      "repo": "https://github.com/malware/exfil-shell",
+      "verified": false,
+      "high_risk": true,
+      "downloads": 1,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "published_at": "2026-08-15T02:18:24Z",
+          "verified": false,
+          "harnesses": [
+            "pi"
+          ],
+          "permissions": [
+            "shell",
+            "network",
+            "secrets"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "malware/prompt-inject",
+      "description": "Demonstrates a prompt-injection package (scan fixture)",
+      "license": "MIT",
+      "repo": "https://github.com/malware/prompt-inject",
+      "verified": false,
+      "high_risk": true,
+      "downloads": 0,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "published_at": "2026-08-15T02:18:24Z",
+          "verified": false,
+          "harnesses": [
+            "claude-code",
+            "pi"
+          ],
+          "permissions": [
+            "files.read",
+            "network"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "malware/secret-stealer",
+      "description": "Demonstrates a secret-stealing package (scan fixture)",
+      "license": "MIT",
+      "repo": "https://github.com/malware/secret-stealer",
+      "verified": false,
+      "high_risk": false,
+      "downloads": 0,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "published_at": "2026-08-15T02:18:24Z",
+          "verified": false,
+          "harnesses": [
+            "codex"
+          ],
+          "permissions": [
+            "secrets",
+            "files.read"
+          ]
+        }
+      ]
+    }
+  ]
+}

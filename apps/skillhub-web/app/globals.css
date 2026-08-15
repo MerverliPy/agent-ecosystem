@@ -1,0 +1,57 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c2330;
+  --border: #2d333b;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.55;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.container { max-width: 1000px; margin: 0 auto; padding: 32px 20px 80px; }
+
+h1 { font-size: 26px; margin: 0 0 6px; }
+h2 { font-size: 18px; margin: 0 0 12px; }
+.sub { color: var(--muted); margin: 0 0 24px; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.panel p { margin: 4px 0; }
+
+.search { width: 100%; padding: 10px 14px; font-size: 15px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.card h3 { margin: 0 0 6px; font-size: 15px; }
+.card .desc { color: var(--muted); font-size: 13px; margin: 0 0 10px; min-height: 36px; }
+
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+.badge.verified { background: rgba(63,185,80,.15); color: var(--green); }
+.badge.high-risk { background: rgba(248,81,73,.15); color: var(--red); }
+.badge.muted { background: var(--panel-2); color: var(--muted); }
+
+.meta { color: var(--muted); font-size: 12px; }
+
+code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+
+.install { display: block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; margin: 4px 0; }
+
+.note { color: var(--muted); font-size: 12px; }
+.back { display: inline-block; margin-bottom: 16px; font-size: 13px; }
+.muted { color: var(--muted); }

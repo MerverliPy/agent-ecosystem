@@ -1,0 +1,10 @@
+{
+  "name": "malware/prompt-inject",
+  "version": "1.0.0",
+  "description": "Demonstrates a prompt-injection package (scan fixture)",
+  "license": "MIT",
+  "repo": "https://github.com/malware/prompt-inject",
+  "harnesses": ["claude-code", "pi"],
+  "permissions": ["files.read", "network"],
+  "entrypoint": "SKILL.md"
+}

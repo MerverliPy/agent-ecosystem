@@ -75,16 +75,16 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Add project-level tests for calculator edge cases (MoE active-param handling, quantization tiers, streaming).
 - **Exit criteria:** dataset validated; calculator matches all seeded rows within tolerance; site builds and passes tests; runner runs end-to-end on at least one local model.
 
-## Phase 3: SkillHub — manifest, CLI, registry, site <!-- PENDING --> <!-- DEPENDS_ON: Phase 2 -->
+## Phase 3: SkillHub — manifest, CLI, registry, site <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 2 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && cargo test && cd apps/skillhub-web && npm run build && npm test -->
-- [ ] Finalize `shared/specs/skill-manifest-spec-v1.md` → `shared/schemas/skill-manifest.schema.json` (validates the spec).
-- [ ] Scaffold `apps/skillhub-cli` (Rust, clap). Implement `search`, `info`, `install` (writes skill into detected harness skills dir; writes `skillhub.lock.json`), `update`, `remove`.
-- [ ] Implement harness detection: Claude Code, Codex, Cursor, Gemini CLI, Copilot, pi, OpenClaw (env vars + config paths per harness).
-- [ ] Implement `verify` subcommand: downloads package, runs the security scanner, reports per-check results.
-- [ ] Implement security scanner (`apps/skillhub-cli/src/scan/`): static checks — prompt-injection markers, dangerous shell/network calls, exfiltration URLs, encoded payloads, unexpected binary blobs. 24+ rules. Includes 3 seeded malicious test packages (fixtures) that must all be flagged.
-- [ ] Scaffold `apps/skillhub-registry` (Rust, axum + SQLite): publish (from git repo + manifest), version listing, download counting, search API.
-- [ ] Scaffold `apps/skillhub-web` (Next.js): search, skill pages (install command, per-harness compatibility badges, verified badge, install counts), publish instructions.
-- [ ] End-to-end test: publish a fixture skill from a local git repo → search → install into a temp harness dir → verify.
+- [x] Finalize `shared/specs/skill-manifest-spec-v1.md` → `shared/schemas/skill-manifest.schema.json` (validates the spec).
+- [x] Scaffold `apps/skillhub-cli` (Rust, clap). Implement `search`, `info`, `install` (writes skill into detected harness skills dir; writes `skillhub.lock.json`), `update`, `remove`.
+- [x] Implement harness detection: Claude Code, Codex, Cursor, Gemini CLI, Copilot, pi, OpenClaw (env vars + config paths per harness).
+- [x] Implement `verify` subcommand: downloads package, runs the security scanner, reports per-check results.
+- [x] Implement security scanner (`apps/skillhub-cli/src/scan/`): static checks — prompt-injection markers, dangerous shell/network calls, exfiltration URLs, encoded payloads, unexpected binary blobs. 24+ rules. Includes 3 seeded malicious test packages (fixtures) that must all be flagged.
+- [x] Scaffold `apps/skillhub-registry` (Rust, axum + SQLite): publish (from git repo + manifest), version listing, download counting, search API.
+- [x] Scaffold `apps/skillhub-web` (Next.js): search, skill pages (install command, per-harness compatibility badges, verified badge, install counts), publish instructions.
+- [x] End-to-end test: publish a fixture skill from a local git repo → search → install into a temp harness dir → verify.
 - **Exit criteria:** CLI installs a real skill into a temp harness; scanner flags all 3 malicious fixtures; registry serves search; web site lists the published skill with badges.
 
 ## Phase 4: SlopGate — rules, score, CI action, dashboard <!-- PENDING --> <!-- DEPENDS_ON: Phase 3 -->

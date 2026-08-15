@@ -138,6 +138,67 @@
 - EXIT CODES: 0
 - Lock verify: PASS
 
+## Phase 3: SkillHub — manifest, CLI, registry, site
+
+**Phase status:** COMPLETE (2026-08-14)
+**Started:** 2026-08-14
+**Notes:**
+- Spec finalized: JSON manifest (`skillhub.json`), draft open questions resolved (JSON over TOML; exact pins + ^-caret ranges; MCP deps deferred to v2). Machine-validated by `shared/schemas/skill-manifest.schema.json`.
+- CLI (`apps/skillhub-cli`, Rust/clap): search, info, install (writes skill + `skillhub.lock.json`), update, remove, verify, scan, harnesses, publish. Harness detection for 7 harnesses (env vars + config paths), pi fallback. Path traversal guards on install.
+- Security scanner: 27 rules (INJ×4, SHELL×8, NET×4, SEC×6, ENC×3, BIN×2), binary/archive detection + invalid-UTF8 ratio. 3 malicious fixtures all flagged; benign fixture clean (false-positive guard).
+- Registry (`apps/skillhub-registry`, axum 0.8 + rusqlite bundled): publish (immutable versions, 409 on dup), search, detail, files+download counting, health. Fixed mid-phase: package names contain '/' so routes use `{owner}/{name}` segments (single `{name}` param cannot hold a slash).
+- Web (`apps/skillhub-web`, Next.js 15): search grid, verified/high-risk/download badges, per-harness install commands, version tables; snapshot from registry via e2e (`data/skills.json`).
+- E2E (`apps/skillhub-cli/scripts/e2e.sh`): 13/13 — publish benign (verified) + 3 malicious (unverified), search, install to temp harness (SKILL.md + lockfile), verify exits 1 with SHELL-02/NET-02 findings, remove, web snapshot.
+- Implementation decisions: `publish` subcommand added to CLI (plan's registry task needed a client half); verified = zero high-severity scan findings.
+
+### Task done: Finalize manifest spec + schema
+- FILES CHANGED: shared/specs/skill-manifest-spec-v1.md (rewrite), shared/schemas/skill-manifest.schema.json (new)
+- VALIDATIONS RUN: CLI manifest::tests (parse/validate) pass; `jq empty` on schema
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: CLI scaffold + commands
+- FILES CHANGED: apps/skillhub-cli/src/{main,manifest,harness,lockfile,registry}.rs, Cargo.toml
+- VALIDATIONS RUN: `cargo test` 9/9; `cargo build` clean
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Harness detection
+- FILES CHANGED: apps/skillhub-cli/src/harness.rs
+- VALIDATIONS RUN: harness tests (pi known, unknown rejected)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: verify subcommand
+- FILES CHANGED: apps/skillhub-cli/src/main.rs (cmd_verify)
+- VALIDATIONS RUN: e2e — verify malware/exfil-shell exits 1 with findings
+- EXIT CODES: 1 (expected)
+- Lock verify: PASS
+
+### Task done: Security scanner (27 rules) + fixtures
+- FILES CHANGED: apps/skillhub-cli/src/scan.rs, apps/skillhub-cli/fixtures/{benign,exfil-shell,prompt-inject,secret-stealer}-skill/
+- VALIDATIONS RUN: scan tests — benign clean, 3 malicious flagged; e2e flags all 3 unverified
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Registry API
+- FILES CHANGED: apps/skillhub-registry/src/main.rs, Cargo.toml
+- VALIDATIONS RUN: `cargo test` 4/4 (publish/search/409/roundtrip/downloads)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Web site
+- FILES CHANGED: apps/skillhub-web/ (app/, components/browse.tsx, lib/, test/, data/skills.json)
+- VALIDATIONS RUN: `npm run build` (8 static routes), `npm test` 3/3
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: End-to-end test
+- FILES CHANGED: apps/skillhub-cli/scripts/e2e.sh (new)
+- VALIDATIONS RUN: `bash apps/skillhub-cli/scripts/e2e.sh` — 13 passed / 0 failed
+- EXIT CODES: 0
+- Lock verify: PASS
+
 ---
 
 ## CHANGE REQUEST <!-- REQUEST_CLOSED -->

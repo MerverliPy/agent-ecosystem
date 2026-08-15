@@ -1,0 +1,10 @@
+{
+  "name": "demo/hello-skill",
+  "version": "1.0.0",
+  "description": "A friendly greeting skill for testing the SkillHub pipeline",
+  "license": "MIT",
+  "repo": "https://github.com/demo/hello-skill",
+  "harnesses": ["pi", "claude-code"],
+  "permissions": ["files.read"],
+  "entrypoint": "SKILL.md"
+}

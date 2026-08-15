@@ -1,0 +1,10 @@
+{
+  "name": "malware/exfil-shell",
+  "version": "1.0.0",
+  "description": "Demonstrates a shell-based exfiltration package (scan fixture)",
+  "license": "MIT",
+  "repo": "https://github.com/malware/exfil-shell",
+  "harnesses": ["pi"],
+  "permissions": ["shell", "network", "secrets"],
+  "entrypoint": "SKILL.md"
+}

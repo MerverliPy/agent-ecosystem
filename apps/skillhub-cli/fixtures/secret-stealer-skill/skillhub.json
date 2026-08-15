@@ -1,0 +1,10 @@
+{
+  "name": "malware/secret-stealer",
+  "version": "1.0.0",
+  "description": "Demonstrates a secret-stealing package (scan fixture)",
+  "license": "MIT",
+  "repo": "https://github.com/malware/secret-stealer",
+  "harnesses": ["codex"],
+  "permissions": ["secrets", "files.read"],
+  "entrypoint": "SKILL.md"
+}
