@@ -18,6 +18,34 @@
   one-shot helper for the human-led `approve` step (edit → approve → verify). It should be
   reviewed and either removed from the tree or kept deliberately once Phases 8–10 are
   running. Do not rely on it as a permanent tool.
+  → RESOLVED: helper deleted before the milestone-2 commit; the three `records/` docs remain kept.
+
+---
+
+## Milestone 2 — decisions & handoff (captured for session continuity)
+
+Milestone 2 was planned, approved, and committed (`76ff75f`, baseline `8d9253e4668c`).
+The next work is **Phase 8: DeskAgent CLI (terminal UI)**, currently `PENDING`.
+
+Decisions confirmed in the prior session (do not re-litigate without new reason):
+
+- **DeskAgent CLI crate location — KEEP the locked path**: `apps/deskagent/src-tauri/crates/deskagent-cli`,
+  added as a third workspace member (with `src-tauri` and `src-tauri/crates/deskagent-core`).
+  A "cleaner-separation" alternative (`apps/deskagent-cli/` top-level crate) was considered and
+  **rejected** because it would create a second Cargo workspace + awkward cross-workspace path
+  dependency, and would require another lock ceremony. Committed plan stands.
+- **Execution is ON HOLD** until the human explicitly says to begin Phase 8.
+- Wiring for Task 1 was verified read-only against the actual `Cargo.toml` files (workspace
+  `members` line, `deskagent-core` manifest, `src-tauri` manifest). The `deskagent-core` crate is
+  Tauri-free, so the CLI depends on it with no desktop surface.
+
+Handoff prompt for a fresh session (so it starts at execution, not re-derivation):
+
+> Read AGENTS.md completely, run `bash scripts/plan-lock.sh verify`, and read PROGRESS.md.
+> PHASES.md now has Milestone 2 (locked, baseline `8d9253e4668c`). Begin the Phase 8 pre-phase
+> protocol per AGENTS.md §4 (verify → verify-env.sh → `phase-8-start` tag → status snapshot),
+> flip Phase 8 to IN_PROGRESS, then implement Task 1: add the `deskagent-cli` workspace member
+> at `apps/deskagent/src-tauri/crates/deskagent-cli` per `records/planning-milestone-2-phases.md`.
 
 ---
 
