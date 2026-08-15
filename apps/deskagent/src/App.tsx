@@ -8,6 +8,8 @@ import SessionList from "./components/SessionList.tsx";
 import MemoryExplorer from "./components/MemoryExplorer.tsx";
 import PersonaCard from "./components/PersonaCard.tsx";
 import ApprovalCardView from "./components/ApprovalCard.tsx";
+import ModelPicker from "./components/ModelPicker.tsx";
+import TasksPanel from "./components/TasksPanel.tsx";
 
 export default function App() {
   const bridge = getBridge();
@@ -16,7 +18,7 @@ export default function App() {
   const [memories, setMemories] = useState<MemoryEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalCard[]>([]);
   const [persona, setPersona] = useState<Persona | null>(null);
-  const [tab, setTab] = useState<"chat" | "memory">("chat");
+  const [tab, setTab] = useState<"chat" | "memory" | "models" | "tasks">("chat");
   const [status, setStatus] = useState("loading…");
 
   useEffect(() => {
@@ -69,6 +71,8 @@ export default function App() {
         <nav className="tabs">
           <button className={tab === "chat" ? "tab active" : "tab"} onClick={() => setTab("chat")}>Chat</button>
           <button className={tab === "memory" ? "tab active" : "tab"} onClick={() => setTab("memory")}>Memory</button>
+          <button className={tab === "models" ? "tab active" : "tab"} onClick={() => setTab("models")}>Models</button>
+          <button className={tab === "tasks" ? "tab active" : "tab"} onClick={() => setTab("tasks")}>Tasks</button>
         </nav>
         {pending.length > 0 && (
           <div className="pending-badge">⚠ {pending.length} approval pending</div>
@@ -81,6 +85,10 @@ export default function App() {
           ) : (
             <div className="empty">Pick a session or start a new one.</div>
           )
+        ) : tab === "models" ? (
+          <div className="tab-page"><ModelPicker /></div>
+        ) : tab === "tasks" ? (
+          <div className="tab-page"><TasksPanel /></div>
         ) : (
           <div className="memory-view">
             <MemoryExplorer memories={memories} />

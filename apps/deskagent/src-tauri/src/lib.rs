@@ -245,6 +245,147 @@ fn memory_wipe(state: State<AppState>) -> Result<(), String> {
     store.wipe_all().map_err(|e| e.to_string())
 }
 
+// ---- Phase 6: runtime / skills / sandbox / conversation ----------------------
+
+#[tauri::command]
+fn runtime_list_models(
+    _state: State<AppState>,
+    backend: String,
+    base_url: Option<String>,
+) -> Result<Vec<deskagent_core::ModelInfo>, String> {
+    let kind = match backend.as_str() {
+        "llama.cpp" => deskagent_core::BackendKind::LlamaCpp,
+        _ => deskagent_core::BackendKind::Ollama,
+    };
+    let reg = deskagent_core::runtime::registry::ModelRegistry::new(kind, base_url);
+    reg.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn runtime_pick(
+    state: State<AppState>,
+    backend: String,
+    base_url: Option<String>,
+    model: String,
+) -> Result<(), String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    let kind = if backend == "llama.cpp" { deskagent_core::BackendKind::LlamaCpp } else { deskagent_core::BackendKind::Ollama };
+    let reg = deskagent_core::runtime::registry::ModelRegistry::new(kind, base_url);
+    reg.remember_choice(&store, &model).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn chat_complete(
+    state: State<AppState>,
+    session_id: String,
+    user_turn: String,
+) -> Result<deskagent_core::sessions::Session, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    // Use the remembered backend/model when configured; otherwise reply with the
+    // deterministic fallback so the UI always works offline (DEC-0005).
+    let (kind, model) = deskagent_core::runtime::registry::ModelRegistry::remembered_choice(&store)
+        .unwrap_or((deskagent_core::BackendKind::Ollama, "unknown".to_string()));
+    let base = store.meta("runtime.base_url").ok().flatten();
+    let reg = deskagent_core::runtime::registry::ModelRegistry::new(kind, base);
+
+    let ctx = deskagent_core::conversation::build_chat_context(&store, &session_id, &user_turn, None)
+        .map_err(|e| e.to_string())?;
+    let history = deskagent_core::sessions::get_session(&store, &session_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "session not found".to_string())?;
+    let msgs: Vec<deskagent_core::runtime::ChatMsg> = history
+        .messages
+        .iter()
+        .take(deskagent_core::conversation::CONTEXT_HISTORY_KEEP)
+        .map(|m| deskagent_core::runtime::ChatMsg {
+            role: m.role.clone(),
+            content: m.content.clone(),
+        })
+        .collect();
+
+    let text = match reg.chat(&model, &ctx.system, &msgs) {
+        Ok(gen) => gen.text,
+        Err(err) => format!("[runtime offline: {err}]\n\nDeterministic fallback:\n\n{user_turn}"),
+    };
+    deskagent_core::conversation::attach_assistant_with_citations(&store, &session_id, &text, ctx.citations)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "session not found".to_string())
+}
+
+#[tauri::command]
+fn skill_install(
+    state: State<AppState>,
+    registry: String,
+    owner: String,
+    name: String,
+) -> Result<deskagent_core::InstalledSkill, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    let skills_dir = deskagent_core::skills::skills_dir_from(&app_skills_base());
+    deskagent_core::skills::install_skill(&store, &registry, &owner, &name, None, &skills_dir)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_list(_state: State<AppState>) -> Result<Vec<deskagent_core::SkillLock>, String> {
+    let skills_dir = deskagent_core::skills::skills_dir_from(&app_skills_base());
+    deskagent_core::skills::installed_skills(&skills_dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_remove(_state: State<AppState>, owner: String, name: String) -> Result<(), String> {
+    let skills_dir = deskagent_core::skills::skills_dir_from(&app_skills_base());
+    deskagent_core::skills::remove_skill(&skills_dir, &owner, &name).map_err(|e| e.to_string())
+}
+
+fn app_skills_base() -> std::path::PathBuf {
+    // Same app-data dir used for the DB; skills live in <appdata>/skills.
+    let dirs = std::path::PathBuf::from(
+        std::env::var("DESKAGENT_DATA_DIR").unwrap_or_else(|_| "./deskagent-data".to_string()),
+    );
+    dirs
+}
+
+#[tauri::command]
+fn action_propose(
+    state: State<AppState>,
+    kind: String,
+    description: String,
+    risk: String,
+    undo_description: String,
+) -> Result<deskagent_core::ActionProposal, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    deskagent_core::sandbox::propose_action(&store, &kind, &description, &risk, &undo_description)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn action_decide(
+    state: State<AppState>,
+    id: String,
+    approved: bool,
+) -> Result<Option<deskagent_core::UndoEntry>, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    deskagent_core::sandbox::decide_action(&store, &id, approved).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn action_list(state: State<AppState>) -> Result<Vec<deskagent_core::ActionProposal>, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    deskagent_core::sandbox::list_actions(&store).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn undo_list(state: State<AppState>) -> Result<Vec<deskagent_core::UndoEntry>, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    deskagent_core::sandbox::list_undo(&store).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn undo_revert(state: State<AppState>, id: String) -> Result<Option<deskagent_core::UndoEntry>, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    deskagent_core::sandbox::revert_undo(&store, &id).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -270,7 +411,18 @@ pub fn run() {
             persona_regenerate,
             memory_consolidate,
             memory_export,
-            memory_wipe
+            memory_wipe,
+            runtime_list_models,
+            runtime_pick,
+            chat_complete,
+            skill_install,
+            skill_list,
+            skill_remove,
+            action_propose,
+            action_decide,
+            action_list,
+            undo_list,
+            undo_revert
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

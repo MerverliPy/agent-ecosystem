@@ -82,6 +82,14 @@ pub fn decide(store: &MemoryStore, card_id: &str, approved: bool) -> rusqlite::R
         "UPDATE approvals SET status = ?1, decided_at = ?2 WHERE id = ?3",
         params![status.as_str(), now_iso(), card_id],
     )?;
+    // shared undo log: an approved memory write can be rolled back (DEC-0009)
+    if approved {
+        let _ = crate::sandbox::record_memory_undo(
+            store,
+            &event.id,
+            &format!("un-remember: {}", event.content.chars().take(80).collect::<String>()),
+        );
+    }
 
     Ok(ApprovalDecision {
         card_id: card_id.to_string(),

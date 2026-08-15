@@ -227,6 +227,24 @@ impl MemoryStore {
                 status TEXT NOT NULL,
                 decided_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS actions (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                description TEXT NOT NULL,
+                risk TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                undo_description TEXT NOT NULL,
+                decided_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS undo_log (
+                id TEXT PRIMARY KEY,
+                scope TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                description TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS persona (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 version INTEGER NOT NULL,

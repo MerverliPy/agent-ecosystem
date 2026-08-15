@@ -109,14 +109,14 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Implement memory UX: memory explorer (timeline/facts/projects — browse, edit, pin, delete, export) and persona card view.
 - **Exit criteria:** memory schema validated; store encrypted and deletable; pipeline extracts memories from a fixture conversation; persona regenerates; retrieval returns scoped hits; memory writes require approval; explorer and persona card render.
 
-## Phase 6: DeskAgent — runtime, skills, sandbox <!-- PENDING --> <!-- DEPENDS_ON: Phase 5 -->
+## Phase 6: DeskAgent — runtime, skills, sandbox <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 5 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && cd apps/deskagent && npm test && cargo check -->
-- [ ] Implement runtime layer: Ollama/llama.cpp backend adapter + Metal path on Apple Silicon (TurboFieldfare-compatible); model registry.
-- [ ] Implement model picker consuming BenchKit data (`shared/lib/will-it-run.mjs`): shows "runs on your machine" per model; offline fallback to bundled dataset.
-- [ ] Implement skill integration: install/update skills from SkillHub registry in-app (manifest spec + lockfile format); skills surface as procedural memory.
-- [ ] Implement action sandbox: tool calls render as approval cards; risky actions (shell, file writes, network) require click-to-approve; full undo log (shared with memory-write approvals).
-- [ ] Wire memory into conversation: persona + scoped memories injected into chat context; "I remember…" citations with sources.
-- [ ] Add voice input path (Whisper/WebRTC stub acceptable at P0) and a scheduled-tasks placeholder.
+- [x] Implement runtime layer: Ollama/llama.cpp backend adapter + Metal path on Apple Silicon (TurboFieldfare-compatible); model registry.
+- [x] Implement model picker consuming BenchKit data (`shared/lib/will-it-run.mjs`): shows "runs on your machine" per model; offline fallback to bundled dataset.
+- [x] Implement skill integration: install/update skills from SkillHub registry in-app (manifest spec + lockfile format); skills surface as procedural memory.
+- [x] Implement action sandbox: tool calls render as approval cards; risky actions (shell, file writes, network) require click-to-approve; full undo log (shared with memory-write approvals).
+- [x] Wire memory into conversation: persona + scoped memories injected into chat context; "I remember…" citations with sources.
+- [x] Add voice input path (Whisper/WebRTC stub acceptable at P0) and a scheduled-tasks placeholder.
 - **Exit criteria:** app chats with a local model; picker reflects BenchKit data; agent recalls facts/preferences across sessions with citations; skills install and invoke; risky actions and memory writes blocked until approved; undo log records actions.
 
 ## Phase 7: Synergies, validation, and launch <!-- PENDING --> <!-- DEPENDS_ON: Phase 6 -->

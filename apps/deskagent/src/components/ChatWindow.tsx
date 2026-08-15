@@ -4,7 +4,25 @@ import { citationLine } from "../lib/memory.ts";
 
 export default function ChatWindow({ session, onSend }: { session: Session; onSend: (content: string) => void }) {
   const [draft, setDraft] = useState("");
+  const [listening, setListening] = useState(false);
   const canSend = draft.trim().length > 0;
+
+  // Voice input stub (Phase 6 Task 6): requests the mic and appends a placeholder
+  // transcript. Real Whisper/WebRTC transcription is a follow-up.
+  async function startVoice() {
+    if (listening) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setListening(true);
+      setDraft("[voice stub] transcription lands in a later iteration — mic acquired");
+      setTimeout(() => {
+        stream.getTracks().forEach((t) => t.stop());
+        setListening(false);
+      }, 1500);
+    } catch {
+      setDraft("[voice unavailable: mic permission denied]");
+    }
+  }
 
   function submit() {
     if (!canSend) return;
@@ -37,6 +55,7 @@ export default function ChatWindow({ session, onSend }: { session: Session; onSe
         ))}
       </div>
       <footer className="composer">
+        <button className={listening ? "voice on" : "voice"} onClick={startVoice} title="Voice input (stub)">🎤</button>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

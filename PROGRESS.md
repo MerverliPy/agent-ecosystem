@@ -350,3 +350,58 @@
 - [ ] Wire memory into conversation: persona + scoped memories injected into chat context; "I remember…" citations with sources.
 - [ ] Add voice input path (Whisper/WebRTC stub acceptable at P0) and a scheduled-tasks placeholder.
 - Exit criteria: app chats with a local model; picker reflects BenchKit data; agent recalls facts/preferences across sessions with citations; skills install and invoke; risky actions and memory writes blocked until approved; undo log records actions.
+
+## Phase 6 execution
+
+**Phase status:** COMPLETE (2026-08-15)
+**Notes:**
+- **Runtime layer** (core `runtime/`): `Backend` trait; Ollama (native `/api/chat`) + llama.cpp (OpenAI-compatible, Metal path on macOS) adapters via ureq; `ModelRegistry` lists/chats/persists choice. Mock-server tests + **live smoke test against the real local Ollama** (`cargo test -p deskagent-core -- --ignored ollama_live`) — qwen2.5-coder:7b replied "Hello! How can I help you today?".
+- **Model picker**: frontend imports `shared/lib/will-it-run.mjs` (pure ESM; added `shared/lib/will-it-run.d.mts` ambient types) + generated bundled catalog `src/lib/benchkit-catalog.ts` (sync script reads benchmarks.jsonl — offline fallback per task). Verdict chips fits/streams/no-fit with RAM + speed.
+- **Skill integration** (core `skills.rs`): install from a SkillHub registry (Phase 3 API shape: `/api/packages/{owner}/{name}` + files), writes files + `skillhub.lock.json`, path-traversal guards; surfaces as approval-gated procedural memory. Local-dir install fallback.
+- **Action sandbox** (core `sandbox.rs`): risky kinds shell/file_write/network blocked as pending approval cards; shared undo log records approved actions AND approved memory writes (approvals::decide hooks it); revert marking.
+- **Memory → conversation** (core `conversation.rs`): persona + scoped retrieval (strict budget) into the system prompt; `assistant_turn`/`chat_complete` attach "I remember…" citations. Shell command `chat_complete` falls back to a deterministic reply when the runtime is offline (DEC-0005).
+- **Voice + tasks stubs**: mic button (getUserMedia placeholder transcript), `TasksPanel` + tasks logic (due/roll/done).
+- Validations: `cargo test` 53/53 (+1 ignored live); `cargo check` incl. Tauri shell; `npm test` 18/18; `npm run build` (tsc + vite) green; live Ollama chat.
+
+### Task done: runtime layer (Ollama/llama.cpp adapters + model registry)
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/runtime/{mod,ollama,llama_cpp,registry}.rs, Cargo.toml (+ureq)
+- VALIDATIONS RUN: `cargo test` runtime 8/8 (mock server); `cargo test -- --ignored ollama_live` exit 0 (real Ollama chat)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: model picker (BenchKit data + offline catalog)
+- FILES CHANGED: apps/deskagent/src/lib/{picker,benchkit-catalog}.ts, scripts/sync-catalog.mjs, shared/lib/will-it-run.d.mts, components/ModelPicker.tsx, test/picker.test.ts
+- VALIDATIONS RUN: `npm test` picker 6/6 (catalog integrity, fit verdicts, ordering, measured-preference); `npm run build` green
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: skill integration (SkillHub install/update/remove → procedural memory)
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/skills.rs, src-tauri/src/lib.rs (skill_install/list/remove commands)
+- VALIDATIONS RUN: `cargo test` skills 3/3 (registry install w/ memory proposal, traversal guards, local-dir install)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: action sandbox + shared undo log
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/sandbox.rs, store.rs (actions + undo_log tables), approvals.rs (undo hook), src-tauri/src/lib.rs (action/undo commands)
+- VALIDATIONS RUN: `cargo test` sandbox 4/4 + approvals tests still green (undo recorded on approved memory writes)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: memory wired into conversation (citations)
+- FILES CHANGED: src-tauri/crates/deskagent-core/src/conversation.rs, src-tauri/src/lib.rs (chat_complete command)
+- VALIDATIONS RUN: `cargo test` conversation 3/3 (persona+memories+history context, citations attached, missing-session)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: voice stub + scheduled-tasks placeholder
+- FILES CHANGED: apps/deskagent/src/components/{ChatWindow (mic),TasksPanel}.tsx, src/lib/tasks.ts, test/tasks.test.ts, App.tsx (Models/Tasks tabs), styles.css
+- VALIDATIONS RUN: `npm test` tasks 2/2; `npm run build` green
+- EXIT CODES: 0
+- Lock verify: PASS
+
+## Phase 6 post-phase
+
+**Phase status:** COMPLETE (2026-08-15)
+- VALIDATE hook: `bash scripts/plan-lock.sh verify` exit 0 · `npm test` exit 0 (18/18) · `cargo check` exit 0
+- Exit criteria met: app chats with a local model (live Ollama smoke); picker reflects BenchKit data; recall with citations across sessions; skills install (registry + local) surfacing as procedural memory; risky actions + memory writes blocked until approved; undo log records actions
+- Handoff: `records/phase-6-handoff.md` — 6/6 tasks, no blocked gates

@@ -13,13 +13,21 @@
 pub mod approvals;
 pub mod capture;
 pub mod consolidation;
+pub mod conversation;
 pub mod embed;
 pub mod encrypt;
 pub mod retrieval;
+pub mod runtime;
+pub mod sandbox;
 pub mod sessions;
+pub mod skills;
 pub mod store;
 
 pub use approvals::{ApprovalCard, ApprovalDecision};
+pub use runtime::{Backend, Generation, ModelInfo, RuntimeError};
+pub use runtime::registry::BackendKind;
+pub use sandbox::{ActionProposal, UndoEntry};
+pub use skills::{InstalledSkill, SkillLock, SkillManifest};
 pub use store::{MemoryEvent, MemoryKind, MemoryScope, MemorySource, MemoryStore, ScopeType};
 
 pub const VERSION: &str = "0.1.0";

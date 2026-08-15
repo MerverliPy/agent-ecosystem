@@ -222,6 +222,69 @@ button.primary:disabled {
   overflow-y: auto;
 }
 
+.tab-page {
+  padding: 1.2rem;
+  overflow-y: auto;
+}
+
+.picker {
+  max-width: 760px;
+}
+
+.picker header,
+.tasks header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.picker h3,
+.tasks h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.picker input[type="range"] {
+  vertical-align: middle;
+  margin: 0 0.4rem;
+}
+
+.tasks .filters {
+  margin: 0.4rem 0 0.6rem;
+}
+
+.tasks .filters input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.amber {
+  color: var(--amber);
+}
+
+.voice.on {
+  border-color: var(--red);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .explorer header {
   display: flex;
   justify-content: space-between;

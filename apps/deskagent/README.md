@@ -72,7 +72,37 @@ all-MiniLM-L12-v2 model on first use).
 
 ## Phase 6 hook
 
+```
 The chat's assistant reply is a placeholder ("model runtime lands in Phase 6").
-The capture pipeline already runs on every message, so by the time the model
-runtime lands, sessions are being remembered and proposals are waiting for
-approval.
+```
+
+Phase 6 replaced that: `chat_complete` runs the remembered backend/model with the
+memory-injected system prompt, and falls back to a deterministic reply when the
+runtime is offline (DEC-0005).
+
+## Phase 6: runtime, skills, sandbox
+
+- **Runtime layer** (`crates/deskagent-core/src/runtime/`): pluggable `Backend` trait;
+  `OllamaBackend` (native `/api/chat`) and `LlamaCppBackend` (OpenAI-compatible
+  `/v1/chat/completions` — the Metal path on Apple Silicon). A `ModelRegistry`
+  lists models, chats, and persists the choice. Mock-server tests + a live smoke
+  test (`cargo test -p deskagent-core -- --ignored ollama_live`) verified against a
+  real local Ollama (qwen2.5-coder:7b).
+- **Model picker** (`src/lib/picker.ts` + `src/components/ModelPicker.tsx`):
+  consumes BenchKit via `shared/lib/will-it-run.mjs` with the bundled catalog
+  (`src/lib/benchkit-catalog.ts`, generated from `shared/datasets/benchmarks.jsonl`
+  by `scripts/sync-catalog.mjs`) as the offline fallback. Shows "runs on your
+  machine / streams / no-fit" per model with RAM + speed estimates.
+- **Skill integration** (`crates/deskagent-core/src/skills.rs`): install/update/remove
+  skills from a SkillHub registry (Phase 3 API + `skillhub.json` + lockfile format),
+  path-traversal guarded; installed skills surface as approval-gated procedural
+  memory.
+- **Action sandbox** (`crates/deskagent-core/src/sandbox.rs`): risky actions
+  (shell/file/network) render as approval cards and are blocked until approved; a
+  shared undo log records approved actions AND approved memory writes, with
+  revert marking (reversal is the app layer's job).
+- **Memory into conversation** (`crates/deskagent-core/src/conversation.rs`):
+  persona + scoped retrieval hits (strict budget) injected into the system prompt;
+  assistant messages carry "I remember…" citations with sources.
+- **Voice + scheduled tasks** (`ChatWindow` mic stub + `TasksPanel` + `src/lib/tasks.ts`):
+  getUserMedia placeholder transcript; local task list with due/roll/done logic.
