@@ -132,16 +132,16 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 
 ---
 
-## Phase 8: DeskAgent CLI (terminal UI) <!-- PENDING --> <!-- DEPENDS_ON: Phase 7 -->
+## Phase 8: DeskAgent CLI (terminal UI) <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 7 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && cd apps/deskagent && cargo build -p deskagent-cli && cargo test && bash scripts/run-all-checks.sh -->
-- [ ] Add `deskagent-cli` binary crate as a third workspace member (`apps/deskagent/src-tauri/crates/deskagent-cli`), depending on `deskagent-core` with no business-logic changes to core.
-- [ ] Introduce the TUI stack (ratatui + crossterm) per DEC-0004; wire a four-pane layout mirroring the web tabs (Chat / Memory+Approvals / Models / Tasks).
-- [ ] Implement the chat loop: input → `capture_turn` → `chat_complete` (runtime or offline deterministic fallback, DEC-0005) → render with citations.
-- [ ] Implement the model picker backed by `runtime_list_models` / `remembered_choice`.
-- [ ] Implement inline approval cards (Y/n) resolving through `approval_decide`.
-- [ ] Implement memory explorer + persona + export/wipe through `memory_list` / `persona_get` / `memory_export` / `memory_wipe`.
-- [ ] Reuse the existing encryption key resolution (`DESKAGENT_PASSPHRASE` env, else 0600 keyfile) so at-rest encryption is not regressed (DEC-0009).
-- [ ] Add CLI-specific tests plus a headless smoke (`deskagent chat` against a local Ollama model).
+- [x] Add `deskagent-cli` binary crate as a third workspace member (`apps/deskagent/src-tauri/crates/deskagent-cli`), depending on `deskagent-core` with no business-logic changes to core.
+- [x] Introduce the TUI stack (ratatui + crossterm) per DEC-0004; wire a four-pane layout mirroring the web tabs (Chat / Memory+Approvals / Models / Tasks).
+- [x] Implement the chat loop: input → `capture_turn` → `chat_complete` (runtime or offline deterministic fallback, DEC-0005) → render with citations.
+- [x] Implement the model picker backed by `runtime_list_models` / `remembered_choice`.
+- [x] Implement inline approval cards (Y/n) resolving through `approval_decide`.
+- [x] Implement memory explorer + persona + export/wipe through `memory_list` / `persona_get` / `memory_export` / `memory_wipe`.
+- [x] Reuse the existing encryption key resolution (`DESKAGENT_PASSPHRASE` env, else 0600 keyfile) so at-rest encryption is not regressed (DEC-0009).
+- [x] Add CLI-specific tests plus a headless smoke (`deskagent chat` against a local Ollama model).
 - **Exit criteria:** `deskagent-cli` builds and passes tests; `run-all-checks.sh` stays green; live chat smoke succeeds over the core (not the GUI); the Tauri GUI still compiles and is marked "deferred."
 
 ## Phase 9: SkillHub registry security (public multi-tenant) <!-- PENDING --> <!-- DEPENDS_ON: Phase 3 -->

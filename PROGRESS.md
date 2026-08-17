@@ -584,3 +584,95 @@ satisfaction of the DoD.
 - Proposed: 2026-08-15T15:26:16Z
 - Reason: Milestone 2 — DeskAgent CLI (TUI), registry security, release/distribution (Phases 8-10)
 - Status: pending human review. On approval: human edits PHASES.md, then runs 'scripts/plan-lock.sh approve "Milestone 2 — DeskAgent CLI (TUI), registry security, release/distribution (Phases 8-10)"'.
+
+---
+
+## Phase 8: DeskAgent CLI (terminal UI)
+
+**Phase status:** COMPLETE (2026-08-17)
+**Started:** 2026-08-17
+**Notes:**
+- New third workspace member `crates/deskagent-cli` (binary `deskagent`): ratatui 0.29 + crossterm 0.28 + clap 4, depending on `deskagent-core` with **zero business-logic changes to core** (all CLI wiring lives in the crate; core untouched by design).
+- Four-pane TUI mirrors the web tabs: Chat / Memory+Approvals / Models / Tasks (ratatui `Tabs` + per-tab panes; persona card, inline Y/n approval cards, memories list, model list with remember, tasks placeholder mirroring the web `TasksPanel`).
+- Chat loop mirrors the Tauri `chat_complete` exactly: `capture_turn` (raw episode) → scheduled extraction pass (every 5 user turns, max 20 proposals) → `build_chat_context` (persona + scoped retrieval, strict injection budget) → backend chat → `attach_assistant_with_citations`; DEC-0005 deterministic fallback when the runtime is offline (never hangs, still stores the assistant turn).
+- Model picker: `models` subcommand + TUI Models pane backed by `runtime_list_models` / `remembered_choice`; auto-picks the first reachable model on a plain `deskagent chat "…"` and persists it (web-picker parity via `remember_choice`).
+- Inline approval cards: `y`/`n` in the Memory+Approvals pane resolve the `▶` focused card through `approvals::decide`; headless `approve`/`reject <id>` accept short ids.
+- Memory explorer + persona + export/wipe via `memory_list` / `persona_get` / `export_all` / `wipe_all` (export writes timestamped JSON in the data dir; wipe requires `--yes`).
+- Encryption key resolution reused verbatim from the shell (`DESKAGENT_PASSPHRASE` + persisted salt, else 0600 keyfile): verified live — `deskagent.key` mode 0600, memory content stored as AES-GCM `{"nonce","cipher"}` ciphertext (encryption not regressed, DEC-0009).
+- Live smoke succeeded over the core (not the GUI): `deskagent chat "Hello, DeskAgent."` against local Ollama auto-picked `qwen2.5-coder:7b` and replied with a real "I remember…" citation; TUI driven through a PTY (typed a message, real model reply + citation rendered, Tab → Memory+Approvals pane, clean Esc quit).
+- Flake fixes during validation: UI tests raced on a shared SQLite data dir (database locked) → per-test unique data dir; keyfile/passphrase tests raced on the process-wide `DESKAGENT_PASSPHRASE` env → shared `ENV_LOCK` mutex. Both suites now stable across repeated runs.
+- `scripts/run-all-checks.sh` gained a `deskagent-cli build` check (now 20 checks).
+- VALIDATE hook: `plan-lock.sh verify` exit 0 · `cargo build -p deskagent-cli` exit 0 · `cargo test` exit 0 (workspace: CLI 27/27 + core 54/54, 1 ignored live each) · `run-all-checks.sh` 20/20. Tauri GUI still compiles (`cargo check` green) and is explicitly deferred per the exit criteria.
+- Exit criteria met: `deskagent-cli` builds + tests pass; `run-all-checks.sh` stays green; live chat smoke succeeds over the core; Tauri GUI compiles and is marked deferred.
+
+### Task done: Add deskagent-cli workspace member
+- FILES CHANGED: apps/deskagent/Cargo.toml (members +1 line), apps/deskagent/src-tauri/crates/deskagent-cli/Cargo.toml (new)
+- VALIDATIONS RUN: `cargo build -p deskagent-cli` exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: TUI stack (ratatui + crossterm) four-pane layout
+- FILES CHANGED: apps/deskagent/src-tauri/crates/deskagent-cli/src/{app,ui}.rs (Tabs + Chat/Memory+Approvals/Models/Tasks panes)
+- VALIDATIONS RUN: ui tests 7/7 (TestBackend render: pane titles, persona, approvals, models, tasks, citations, status bar); PTY boot smoke exit 124 (still running = no panic)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Chat loop (capture_turn → chat_complete-equivalent → citations)
+- FILES CHANGED: apps/deskagent/src-tauri/crates/deskagent-cli/src/chat.rs, app.rs (chat_submit)
+- VALIDATIONS RUN: `cargo test` chat 8/8 (offline fallback, auto-pick, explicit model, extraction pass, missing session); live Ollama chat exit 0
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Model picker (runtime_list_models / remembered_choice)
+- FILES CHANGED: apps/deskagent/src-tauri/crates/deskagent-cli/src/{main.rs (models), app.rs (Models pane), chat.rs (auto-pick)}
+- VALIDATIONS RUN: `deskagent models` lists qwen2.5-coder:7b + qwen2.5vl:7b; `--pick` persists; pick_model test
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Inline approval cards (Y/n via approval_decide)
+- FILES CHANGED: apps/deskagent/src-tauri/crates/deskagent-cli/src/{app.rs (approve/reject focused), main.rs (approve/reject)}
+- VALIDATIONS RUN: inline_approval_flow + reject_focused tests; live approve/reject on 5 extraction cards (±0.1 confidence applied)
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: Memory explorer + persona + export/wipe
+- FILES CHANGED: apps/deskagent/src-tauri/crates/deskagent-cli/src/{main.rs (memory/persona/export/wipe), app.rs (Memory pane), ui.rs}
+- VALIDATIONS RUN: memory list (10 rows w/ kind/approval/scope/confidence), persona display, export 10 memories → JSON, wipe guarded (exit 2 without --yes) then exit 0
+- EXIT CODES: 0 / 2 (designed)
+- Lock verify: PASS
+
+### Task done: Encryption key resolution reused (DEC-0009)
+- FILES CHANGED: apps/deskagent/src-tauri/crates/deskagent-cli/src/data.rs
+- VALIDATIONS RUN: data tests 4/4 (0600 keyfile, passphrase determinism across relaunches, hex parity with shell, data-dir resolution); `strings deskagent.db` shows ciphertext only for memory content
+- EXIT CODES: 0
+- Lock verify: PASS
+
+### Task done: CLI tests + headless smoke
+- FILES CHANGED: apps/deskagent/src-tauri/crates/deskagent-cli/src/* (tests), scripts/run-all-checks.sh (+deskagent-cli build)
+- VALIDATIONS RUN: `cargo test -p deskagent-cli` 27/27; `cargo test -p deskagent-cli -- --ignored deskagent_chat_live` exit 0; `run-all-checks.sh` 20/20; workspace `cargo test` CLI 27 + core 54
+- EXIT CODES: 0
+- Lock verify: PASS
+
+## Phase 8 post-phase
+
+**Phase status:** COMPLETE (2026-08-17)
+- VALIDATE hook pieces: `plan-lock.sh verify` exit 0 · `cargo build -p deskagent-cli` exit 0 · workspace `cargo test` exit 0 (CLI 27/27 + core 54/54) · `run-all-checks.sh` 20/20
+- Exit criteria met: `deskagent-cli` builds and passes tests; `run-all-checks.sh` stays green; live chat smoke succeeds over the core (real Ollama, auto-pick + citations, PTY-driven TUI interaction); Tauri GUI still compiles and is marked deferred.
+- Handoff: `records/phase-8-handoff.md` — 8/8 tasks, no blocked gates.
+
+## Phase 9: SkillHub registry security (public multi-tenant)
+
+**Phase status:** PENDING
+**Mirrored tasks (from PHASES.md; checkboxes live in PHASES.md):**
+- [ ] **MUST LAND FIRST:** normalize the package identifier model to a canonical `owner/name` used identically by schema and handlers; reset the runtime registry DB (no migration code) per the DECIDED note. The read/write key-space mismatch is unresolved until this lands — every later auth task depends on it.
+- [ ] Enforce a package-name grammar and a single `canonical_id()` path for all lookups and publishes.
+- [ ] Introduce owner namespaces with per-owner publish scope (only the owning identity may publish under `owner/*`).
+- [ ] Add authentication/authorization for publish via self-contained, scoped, revocable capability tokens; keep read anonymous; never log or env-embed secrets.
+- [ ] Add rate limiting (per-IP and per-token token buckets on publish; global read limits) using tower + governor or equivalent.
+- [ ] Harden input validation: semver, manifest JSON-schema, package/file size caps, path-traversal guard on `files` keys, content-type checks, request body cap.
+- [ ] Add publish integrity: package signing verified against a registry CA that issues per-owner keys; owner key rollover/revocation support.
+- [ ] Harden transport/runtime: TLS termination guidance, bind-address policy, structured errors with no internal detail leakage, default-deny posture.
+- [ ] Add abuse/DoS controls: max DB size, quarantine of unverified/`high_risk` packages behind explicit opt-in, batch download-count writes.
+- [ ] Enforce artifact hygiene: runtime DB (`*.db`), seed tokens, and signing secrets stay out of git and out of any container image; add a guard so no build step copies them into a release artifact.
+- [ ] Add an adversarial security test suite (path traversal, oversized, bad semver, unauthorized, signature mismatch) and keep the existing registry unit tests green.
+- Exit criteria: unauthenticated publish is rejected; unauthorized owner publish is rejected; malicious fixtures fail validation; verified packages remain anonymously readable; all adversarial + existing tests green.

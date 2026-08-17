@@ -54,6 +54,7 @@ run "skillhub-web build"                    npm run build --prefix "$ROOT/apps/s
 echo "== deskagent =="
 run "deskagent frontend tests"              npm test --prefix "$ROOT/apps/deskagent"
 run "deskagent cargo tests"                 bash -c "cd '$ROOT/apps/deskagent' && cargo test --quiet"
+run "deskagent-cli build"                   bash -c "cd '$ROOT/apps/deskagent' && cargo build -p deskagent-cli --quiet"
 run "deskagent cargo check (Tauri shell)"   bash -c "cd '$ROOT/apps/deskagent' && cargo check --quiet"
 run "deskagent frontend build"              npm run build --prefix "$ROOT/apps/deskagent"
 

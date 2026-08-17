@@ -1,0 +1,18 @@
+[package]
+name = "deskagent-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DeskAgent CLI — ratatui terminal UI over the deskagent-core memory system. Four panes mirroring the web tabs (Chat / Memory+Approvals / Models / Tasks) plus headless commands; reuses the core with zero business-logic changes."
+
+[[bin]]
+name = "deskagent"
+path = "src/main.rs"
+
+[dependencies]
+deskagent-core = { path = "../deskagent-core" }
+clap = { version = "4", features = ["derive"] }
+ratatui = "0.29"
+crossterm = "0.28"
+serde_json = "1"
+chrono = "0.4"

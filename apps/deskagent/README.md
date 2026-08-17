@@ -16,7 +16,9 @@ apps/deskagent/
 │   └── App.tsx               # shell: sidebar + chat/memory tabs
 ├── src-tauri/                # Tauri 2 shell
 │   ├── src/lib.rs            # commands → deskagent-core (session/memory/approval/persona)
-│   └── crates/deskagent-core # the memory engine (no Tauri dep, fully unit-tested)
+│   └── crates/
+│       ├── deskagent-core    # the memory engine (no Tauri dep, fully unit-tested)
+│       └── deskagent-cli     # the terminal UI (ratatui + crossterm) + headless commands
 │       └── src/
 │           ├── store.rs      # SQLite store (rusqlite bundled): 4 memory kinds, scopes, approvals
 │           ├── encrypt.rs    # AES-256-GCM at rest, PBKDF2 key derivation
@@ -46,11 +48,35 @@ for that project) — DEC-0009. Retrieval only ever sees **approved** memories.
 
 ```bash
 npm install
-npm test                 # 10 frontend logic tests
-cargo test               # 35 core tests (SQLite store, crypto, capture, persona, retrieval)
+npm test                 # frontend logic tests
+cargo test               # core + CLI tests (SQLite store, crypto, capture, persona, retrieval, TUI)
 cargo check              # workspace incl. Tauri shell
 npm run tauri dev        # desktop app (needs tauri-cli + webkit2gtk on Linux)
 ```
+
+### Terminal UI (Phase 8 — the primary DeskAgent surface)
+
+The CLI is a third workspace member (`crates/deskagent-cli`). It reuses
+`deskagent-core` exactly as the Tauri shell does — no business-logic changes to
+core — and mirrors the web tabs with a four-pane ratatui layout:
+
+```bash
+cargo run -p deskagent-cli          # interactive TUI (default)
+cargo run -p deskagent-cli -- chat "Hello"          # one-shot chat (offline fallback, DEC-0005)
+cargo run -p deskagent-cli -- models                # list models / --pick remembers one
+cargo run -p deskagent-cli -- approvals             # approval cards; approve/reject <id>
+cargo run -p deskagent-cli -- memory                # memory explorer (--approved / --kind)
+cargo run -p deskagent-cli -- persona               # persona card
+cargo run -p deskagent-cli -- export --out out.json # DEC-0009 export
+cargo run -p deskagent-cli -- wipe --yes            # DEC-0009 delete everything
+```
+
+The TUI shares the same data dir and at-rest encryption key policy as the shell
+(`DESKAGENT_PASSPHRASE` or the 0600 keyfile), so the CLI and GUI read the same
+encrypted store. See `crates/deskagent-cli/README.md` for keys and details.
+
+**Status:** the Tauri GUI still compiles and is explicitly **deferred** — the CLI
+is the supported desktop surface for this milestone.
 
 The UI also runs in a plain browser (`npm run dev`) in demo mode — localStorage
 backed, with seeded memories — so the shell is explorable without the desktop
