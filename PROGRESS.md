@@ -676,3 +676,11 @@ satisfaction of the DoD.
 - [ ] Enforce artifact hygiene: runtime DB (`*.db`), seed tokens, and signing secrets stay out of git and out of any container image; add a guard so no build step copies them into a release artifact.
 - [ ] Add an adversarial security test suite (path traversal, oversized, bad semver, unauthorized, signature mismatch) and keep the existing registry unit tests green.
 - Exit criteria: unauthenticated publish is rejected; unauthorized owner publish is rejected; malicious fixtures fail validation; verified packages remain anonymously readable; all adversarial + existing tests green.
+
+
+### Task done: README + user-facing docs enhancement (human-authorized, polisher analysis)
+- FILES CHANGED: README.md (rewritten: Start here, product cards with links, Mermaid architecture diagram, plan-lock human/agent callout, demo outcome table, status legend, visual-assets-pending section); apps/skillhub-registry/README.md (new); apps/skillhub-web/README.md (new)
+- VALIDATIONS RUN: plan-lock.sh verify exit 0 (README.md/docs not lock-hashed); verify-env.sh ENV-OK; run-all-checks.sh run count = 20 (README claim checked); all 8 product README link targets exist
+- EXIT CODES: 0
+- Lock verify: PASS (PHASES.md/PLAN.lock untouched)
+- NOTE: README.md is ranked "No" for agents in AGENTS.md; this edit was explicitly human-authorized in-session. Screenshots/GIF (polisher suggestions 9-10) deferred to human-captured assets; marked as pending in README.

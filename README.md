@@ -2,27 +2,72 @@
 
 A monorepo building four interoperable products around the agent/AI ecosystem, driven by a **content-locked build plan**.
 
-| App | Dir | What it is |
-|-----|-----|------------|
-| BenchKit | `apps/bench-site` | Local-inference benchmark dataset, "will-it-run" calculator, searchable matrix site |
-| SkillHub | `apps/skillhub-cli`, `apps/skillhub-registry`, `apps/skillhub-web` | Cross-harness skill package manager + registry + security scanner |
-| SlopGate | `apps/slopgate`, `apps/slopgate-action`, `apps/slopgate-dash` | Anti-slop lint rules, 0–100 score, CI PR gate |
-| DeskAgent | `apps/deskagent` | Local-first personal agent with self-memory (DEC-0009): Tauri 2 + React desktop shell **and** a ratatui terminal UI (`crates/deskagent-cli`) over the same Rust core |
+> **Status legend:** ✅ Complete · 🔄 In progress · ⏸️ Deferred
+> Phases 1–8 **✅ COMPLETE** (Milestone 1 accepted) · Milestone 2 in progress — Phases 9–10 **🔄 pending**
+
+## Start here
+
+New to the repo? Three ways in:
+
+- **Pick a product** — see the [product map](#products) below and open its directory.
+- **Run all checks** — `bash scripts/run-all-checks.sh` (20 checks, one exit code; the CI surrogate).
+- **See it work** — run a [demo](#demos); every demo is offline and end-to-end.
+
+Full plan and locked constraints: [`PHASES.md`](PHASES.md). Execution status and change requests: [`PROGRESS.md`](PROGRESS.md). Per-phase handoff records: [`records/`](records/).
+
+## Products
+
+Four interoperable products (one directory per product, DEC-0001). See [`apps/README.md`](apps/README.md) for the full per-app breakdown.
+
+| Product | Dir | What it is | Links |
+|---------|-----|------------|-------|
+| **BenchKit** | `apps/bench-site` | Local-inference benchmark dataset, "will-it-run" calculator, searchable matrix site | [read product docs](apps/bench-site/README.md) |
+| **SkillHub** | `apps/skillhub-cli`, `apps/skillhub-registry`, `apps/skillhub-web` | Cross-harness skill package manager + registry + security scanner | [CLI](apps/skillhub-cli/README.md) · [registry](apps/skillhub-registry/README.md) · [web](apps/skillhub-web/README.md) |
+| **SlopGate** | `apps/slopgate`, `apps/slopgate-action`, `apps/slopgate-dash` | Anti-slop lint rules, 0–100 score, CI PR gate | [core](apps/slopgate/README.md) · [action](apps/slopgate-action/README.md) · [dash](apps/slopgate-dash/README.md) |
+| **DeskAgent** | `apps/deskagent` | Local-first personal agent with self-memory (DEC-0009): Tauri 2 + React desktop shell **and** a ratatui terminal UI (`crates/deskagent-cli`) over the same Rust core | [read product docs](apps/deskagent/README.md) |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    B[BenchKit<br/>data + will-it-run] -->|model picker| D[DeskAgent]
+    S[SkillHub<br/>registry + lockfile] -->|skill installer| D
+    G[SlopGate<br/>quality scan] -->|verify --quality| S
+    D -->|approval cards + undo log| D
+```
+
+Integration bullets (source: [`apps/README.md`](apps/README.md) Ecosystem section):
+
+- BenchKit data + `will-it-run` feed **DeskAgent's** model picker (live fetch, bundled offline fallback).
+- **SkillHub** registry + lockfile format feed **DeskAgent's** in-app skill installer (skills surface as procedural memory).
+- **SlopGate** scanner feeds **SkillHub's** optional `verify --quality` check (quality score on skill pages).
+- Approval cards + shared undo log gate every DeskAgent memory write and risky action (DEC-0009).
 
 ## Plan lock
 
-- `PHASES.md` — the build plan. **Content-locked.** Agents may tick checkboxes/status only.
-- `PLAN.lock` — lock manifest: content hash + approval token hash + approval history.
-- `PROGRESS.md` — agent-writable execution status and change requests.
-- `scripts/plan-lock.sh` — `verify | status | propose | init | approve | check-staged | check-push`.
+The plan is **content-locked**: agents may tick checkboxes/status only; humans own content changes and the re-lock ceremony.
+
+| File | Role |
+|------|------|
+| `PHASES.md` | The build plan. **Content-locked.** Agents: checkboxes/status only. |
+| `PLAN.lock` | Lock manifest: content hash + approval token hash + approval history. |
+| `PROGRESS.md` | Agent-writable execution status and change requests. |
+| `scripts/plan-lock.sh` | `verify \| status \| propose \| init \| approve \| check-staged \| check-push`. |
+
+> **⚠️ Who may run what**
+> **Agents:** `verify`, `status`, `propose`, `check-staged`, `check-push` only.
+> **Humans only:** `approve` (and `init` on first setup) — both require an interactive terminal and the approval token.
 
 **Commands:**
 
 ```bash
+# Agent-safe (run freely):
 bash scripts/plan-lock.sh verify     # integrity check — must pass before/after every phase
 bash scripts/plan-lock.sh status     # lock info + open change requests
 bash scripts/plan-lock.sh propose "why"  # agents' only channel to request a plan change
-bash scripts/plan-lock.sh approve "why"  # HUMAN ONLY: re-lock after an approved content change
+
+# HUMAN ONLY — requires interactive terminal + typing APPROVE:
+bash scripts/plan-lock.sh approve "why"  # re-lock after an approved content change
 ```
 
 **Approval ceremony for plan changes (humans only):**
@@ -48,11 +93,9 @@ scripts/         plan-lock.sh, verify-env.sh, run-all-checks.sh
 records/         per-phase handoff records
 ```
 
-See `PHASES.md` for the full plan and locked constraints.
-
 ## Status
 
-Phases 1–8 are **COMPLETE** (Milestone 1 accepted; Milestone 2 in progress — Phases 9–10 pending).
+Phases 1–8 are **✅ COMPLETE** (Milestone 1 accepted; Milestone 2 in progress — Phases 9–10 **🔄 pending**).
 Every product is built, validated, and cross-wired:
 
 - BenchKit data + `will-it-run` feed **DeskAgent's** model picker (live fetch, bundled offline fallback).
@@ -64,17 +107,18 @@ Every product is built, validated, and cross-wired:
   (Chat / Memory+Approvals / Models / Tasks) mirroring the web tabs, plus headless subcommands
   (`chat`, `models`, `approvals`, `memory`, `persona`, `export`, `wipe`). It reuses the core exactly
   as the Tauri shell does — same data dir, same at-rest encryption key policy. The Tauri GUI still
-  compiles and is explicitly **deferred**; the CLI is the supported desktop surface.
+  compiles and is explicitly **⏸️ deferred**; the CLI is the supported desktop surface.
 
 ## Demos
 
-```bash
-bash scripts/run-all-checks.sh        # 20 checks, single exit code — the CI surrogate
-node scripts/demos/benchkit-demo.mjs                # dataset + calculator
-bash scripts/demos/skillhub-install-demo.sh         # publish → install → verify --quality
-bash scripts/demos/slopgate-gate-demo.sh            # fixture scores + CI gate
-bash scripts/demos/deskagent-approval-demo.sh       # capture → approve → sandbox → citations
-```
+All demos run offline and end-to-end from the repo root. See [`scripts/demos/README.md`](scripts/demos/README.md) for details.
+
+| Demo | Command | Shows | Prereq |
+|------|---------|-------|--------|
+| BenchKit | `node scripts/demos/benchkit-demo.mjs` | dataset rows (DEC-0006 sources) + will-it-run verdicts | Node.js |
+| SkillHub | `bash scripts/demos/skillhub-install-demo.sh` | publish → install → `verify --quality` | Bash (starts its own registry on an ephemeral port) |
+| SlopGate | `bash scripts/demos/slopgate-gate-demo.sh` | fixture scores + CI gate exit codes (threshold 50) | Bash |
+| DeskAgent | `bash scripts/demos/deskagent-approval-demo.sh` | capture → approve/reject → sandbox + undo → skill install → citations | Bash |
 
 DeskAgent CLI (Phase 8):
 
@@ -83,4 +127,10 @@ cd apps/deskagent && cargo run -p deskagent-cli                 # four-pane TUI
 cd apps/deskagent && cargo run -p deskagent-cli -- chat "Hello" # headless chat
 ```
 
-See `scripts/demos/README.md` for details.
+**Live model path (opt-in):** `cargo test -p deskagent-core -- --ignored ollama_live` with a running Ollama.
+
+## Visual assets (pending)
+
+Screenshots of BenchKit, SkillHub, SlopGate, and DeskAgent, plus a short DeskAgent TUI demo GIF, are
+planned but not yet captured. When added, store them under a product asset path (e.g. `apps/*/docs/assets/`)
+at 16:9 with descriptive alt text, and link them from the product rows above.
