@@ -7,7 +7,7 @@ A monorepo building four interoperable products around the agent/AI ecosystem, d
 | BenchKit | `apps/bench-site` | Local-inference benchmark dataset, "will-it-run" calculator, searchable matrix site |
 | SkillHub | `apps/skillhub-cli`, `apps/skillhub-registry`, `apps/skillhub-web` | Cross-harness skill package manager + registry + security scanner |
 | SlopGate | `apps/slopgate`, `apps/slopgate-action`, `apps/slopgate-dash` | Anti-slop lint rules, 0–100 score, CI PR gate |
-| DeskAgent | `apps/deskagent` | Consumer local-first agent desktop app (Tauri 2 + React) |
+| DeskAgent | `apps/deskagent` | Local-first personal agent with self-memory (DEC-0009): Tauri 2 + React desktop shell **and** a ratatui terminal UI (`crates/deskagent-cli`) over the same Rust core |
 
 ## Plan lock
 
@@ -52,23 +52,35 @@ See `PHASES.md` for the full plan and locked constraints.
 
 ## Status
 
-All seven phases are **COMPLETE** (Milestone 1 accepted). Every product is built,
-validated, and cross-wired:
+Phases 1–8 are **COMPLETE** (Milestone 1 accepted; Milestone 2 in progress — Phases 9–10 pending).
+Every product is built, validated, and cross-wired:
 
 - BenchKit data + `will-it-run` feed **DeskAgent's** model picker (live fetch, bundled offline fallback).
 - **SkillHub** registry + lockfile format feed **DeskAgent's** in-app skill installer (skills surface as procedural memory).
 - **SlopGate** scanner feeds **SkillHub's** optional `verify --quality` check (quality score on skill pages).
 - Approval cards + shared undo log gate every DeskAgent memory write and risky action (DEC-0009).
 - DeskAgent chats with a real local model (Ollama/llama.cpp adapters; live-verified).
+- **Phase 8:** the DeskAgent CLI (`crates/deskagent-cli`) ships a four-pane ratatui terminal UI
+  (Chat / Memory+Approvals / Models / Tasks) mirroring the web tabs, plus headless subcommands
+  (`chat`, `models`, `approvals`, `memory`, `persona`, `export`, `wipe`). It reuses the core exactly
+  as the Tauri shell does — same data dir, same at-rest encryption key policy. The Tauri GUI still
+  compiles and is explicitly **deferred**; the CLI is the supported desktop surface.
 
 ## Demos
 
 ```bash
-bash scripts/run-all-checks.sh        # 19 checks, single exit code — the CI surrogate
+bash scripts/run-all-checks.sh        # 20 checks, single exit code — the CI surrogate
 node scripts/demos/benchkit-demo.mjs                # dataset + calculator
 bash scripts/demos/skillhub-install-demo.sh         # publish → install → verify --quality
 bash scripts/demos/slopgate-gate-demo.sh            # fixture scores + CI gate
 bash scripts/demos/deskagent-approval-demo.sh       # capture → approve → sandbox → citations
+```
+
+DeskAgent CLI (Phase 8):
+
+```bash
+cd apps/deskagent && cargo run -p deskagent-cli                 # four-pane TUI
+cd apps/deskagent && cargo run -p deskagent-cli -- chat "Hello" # headless chat
 ```
 
 See `scripts/demos/README.md` for details.
