@@ -55,6 +55,7 @@
 - None. Two test flake races found during validation (shared SQLite data dir; shared `DESKAGENT_PASSPHRASE` env) were fixed; suites stable across repeated runs.
 - Known product limitation (tracked, not blocking): the Tasks pane is a placeholder mirroring the web stub — the core exposes no tasks table; the runner lands with the GUI milestone.
 - Chat `--session <missing-id>` errors "session not found" by design (create by omitting `--session`).
+- **PR status:** delivered as a direct push to `main` (`dd49afe`); the GitHub PR description is archived in `records/phase-8-pull-description.md` (GitHub cannot host an empty-diff PR since base == head).
 
 ## EXACT NEXT ACTION
 
