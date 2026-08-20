@@ -24,3 +24,9 @@ skillhub-registry/data/
 # Local env
 .env
 .env.local
+
+# Pi session exports
+pi-session-*.html
+
+# Pi project-local config (prompts, agents, settings)
+.pi/

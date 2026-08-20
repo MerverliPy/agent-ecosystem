@@ -1,65 +1,48 @@
-# AGENTS.md — Constitution for executing agents
+# AGENTS.md — agent-ecosystem (content-locked build plan)
 
-This repository runs a **content-locked build plan**. Read this file completely before touching anything.
-The plan file (`PHASES.md`) is immutable; the lock is enforced by scripts and git hooks, and this constitution
-is the behavioral contract. Both layers apply.
+This repo runs a content-locked plan. Read this file and PHASES.md "Lock Policy (READ
+FIRST)" before touching anything. PHASES.md is the normative source for the lock and the
+DEC constraints; this file is the operational contract for agents.
 
-## 1. Source-of-truth hierarchy
+## Source of truth
+`PLAN.lock` (never) > `PHASES.md` (checkboxes/status comments only) > `AGENTS.md` (no — fixes
+require human review) > `PROGRESS.md` (yes — the only free-form channel) > `README.md` (no).
 
-| Rank | File | Role | Writable by agents? |
-|------|------|------|---------------------|
-| 1 | `PLAN.lock` | Lock manifest (hash, token hash, history) | **NEVER** |
-| 2 | `PHASES.md` | The build plan (content) | Content: **NO**. Checkboxes `[ ]`→`[x]` and status comments: **YES** |
-| 3 | `AGENTS.md` | This constitution | No (fixes require human review) |
-| 4 | `PROGRESS.md` | Execution status, notes, change requests | **YES — your only free-form channel** |
-| 5 | `README.md` | Ecosystem overview | No |
+## Canonical commands (all verified in-repo)
+- **Lock:** `bash scripts/plan-lock.sh {verify|status|propose}` — `verify` before/after every
+  task & phase (must exit 0); `propose "<reason>"` is the ONLY plan-change channel;
+  `init`/`approve` are humans-only (git hooks call `check-staged`/`check-push` internally).
+- **Env:** `bash scripts/verify-env.sh` — must print `ENV-OK`.
+- **Validate:** `bash scripts/run-all-checks.sh` — 20 checks, must print `RUN-ALL-CHECKS-OK`;
+  authoritative per-product suite (bench-site, slopgate-action, slopgate-dash, skillhub-web,
+  skillhub-cli/registry, deskagent, deskagent-cli) — mirror its exact commands.
+- **Root tests:** `npm test`. **Hooks:** `hooks/install-hooks.sh` (never bypass). **Demos:**
+  `bash scripts/demos/*.sh`.
 
-## 2. Lock policy (DEC-0003, DEC-0008)
-
-- Run `bash scripts/plan-lock.sh verify` **before and after every phase** and **after every task** that touches
-  any file. If it fails: STOP. Do not continue, do not edit `PLAN.lock`, do not commit.
-- You may flip task checkboxes (`- [ ]` → `- [x]`) and phase status comments (`PENDING` → `IN_PROGRESS` →
-  `COMPLETE`, or `BLOCKED` with reason in PROGRESS.md). These are normalized away before hashing, so they
-  never break the lock. Everything else in `PHASES.md` — adding/removing/reordering/rephrasing tasks or phases —
-  is a **content change** and is forbidden.
-- **PROHIBITED (zero-tolerance):**
-  - Modify `PLAN.lock`, ever.
-  - Run `scripts/plan-lock.sh init` or `approve`.
-  - Read `~/.config/agent-ecosystem/plan.key`.
-  - Set or use `PLAN_APPROVAL_TOKEN`.
-  - Bypass the hooks (`git commit --no-verify`, manual hook edits, deleting `.git/hooks/pre-commit`).
-  - Force-push, rebase history, or amend a commit that touched `PHASES.md`/`PLAN.lock`.
-- **To request a change** (new task, reorder, scope change): `bash scripts/plan-lock.sh propose "<reason>"`.
-  This appends a `CHANGE REQUEST` to `PROGRESS.md` and stops your current task. The human reviews; if approved,
-  the human edits `PHASES.md` and re-locks with `approve`. Only then may you proceed. Never implement
+## Lock rules (PHASES.md "Lock Policy" is normative; summary)
+- `verify` before/after every task and phase. On FAIL: STOP, do not edit `PLAN.lock`, do not commit.
+- `PHASES.md` edits: checkbox flips and status comments only (normalized away before hashing).
+- PROHIBITED: edit `PLAN.lock`; run `init`/`approve`; read `~/.config/agent-ecosystem/plan.key`;
+  set or use `PLAN_APPROVAL_TOKEN`; `git commit --no-verify`, hook edits, force-push, rebase, or
+  amend any commit touching `PHASES.md`/`PLAN.lock`.
+- Change requests: `propose "<reason>"` → human edits → human runs `approve`. Never implement
   unapproved scope.
 
-## 3. Guardrails (locked constraints from PHASES.md META)
+## Guardrails
+Follow the DEC-0001…DEC-0009 constraints in PHASES.md "Locked Constraints" — that table is the
+single source (this file does not restate them). Layout: `apps/` (one dir per product),
+`shared/`, `scripts/`; `hooks/`, `records/`, `data/` are plan-sanctioned top-level dirs.
+DEC-0009 (local-first, approval-gated memory) applies to all DeskAgent work.
 
-- `DEC-0001` Monorepo: `apps/<product>`, `shared/`, `scripts/`. No new top-level dirs.
-- `DEC-0002` MIT/Apache-2.0 only; no copyleft dependencies.
-- `DEC-0004` Rust for CLIs, TypeScript/Next.js for web, Tauri 2 + React for desktop.
-- `DEC-0005` No mandatory telemetry; cloud calls opt-in.
-- `DEC-0006` BenchKit rows must carry `source_url`; no paid ranking.
-- `DEC-0007` Strict phase order; no scope creep.
+## Execution
+Run per the phase-executor skill, with these repo deltas: branch must be `main`; per phase:
+`verify` → `bash scripts/verify-env.sh` → `git tag phase-{N}-start`; execute tasks, ticking
+checkboxes in `PHASES.md` immediately; run the phase's `<!-- VALIDATE: … -->` command (retry
+3×, then mark `BLOCKED`, record the reason in `PROGRESS.md`, roll back to `phase-{N}-start`,
+STOP); write `records/phase-{N}-handoff.md`; mark `COMPLETE`, delete the tag, mirror the next
+phase's tasks into `PROGRESS.md` before starting.
 
-## 4. Execution protocol (per phase-executor conventions, adapted)
-
-1. **Boot:** `verify` the lock → read `PROGRESS.md` → find first phase not COMPLETE with unchecked tasks.
-2. **Pre-phase:** branch must be `main`; run `bash scripts/verify-env.sh`; create checkpoint tag
-   `git tag phase-{N}-start`.
-3. **Pre-task:** run `verify`; snapshot `git status --porcelain`.
-4. **Execute** the task. When done: update its checkbox in `PHASES.md` **immediately**.
-5. **Post-task:** `verify` again; append a one-line diff summary to `PROGRESS.md` under the phase section.
-6. **Post-phase:** run the phase's `<!-- VALIDATE: ... -->` command. If it fails, retry up to 3×, then mark the
-   phase `BLOCKED`, record the reason in `PROGRESS.md`, roll back to `phase-{N}-start`, and STOP.
-7. **Handoff:** write `records/phase-{N}-handoff.md` with: completion state, FILES CHANGED, VALIDATIONS RUN +
-   exit codes, UNRESOLVED GATES, EXACT NEXT ACTION (first task of next phase).
-8. Mark the phase `COMPLETE`, delete the checkpoint tag, update `PROGRESS.md`, and mirror the next phase's
-   tasks into `PROGRESS.md` before starting.
-
-## 5. Required post-task template (append to PROGRESS.md after every task)
-
+## Required post-task template (append to PROGRESS.md)
 ```markdown
 ### Task done: <task text>
 - FILES CHANGED: <paths + insertions/deletions>
@@ -67,15 +50,20 @@ is the behavioral contract. Both layers apply.
 - EXIT CODES: <map>
 - Lock verify: PASS/FAIL
 ```
+Also available as `.pi/prompts/post-task.md`.
 
-## 6. Prohibited actions (beyond the lock)
+## Safety, mobile, release
+- **Secrets:** never commit, log, or echo `*.db`, `.env`, seed tokens, signing keys, or plan.key
+  material; Phase 9 adversarial fixtures must stay inert (no real credentials).
+- **Mobile (DeskAgent TUI):** keep narrow (40–60 col) rendering, min-size guard, keyboard-only
+  fallback; run the TestBackend suite at 40/50/60/120 cols; status bar must not truncate.
+- **Release (Phase 10):** `scripts/release-gate.sh` is release-only; never loosen `run-all-checks.sh`.
 
-- No work outside the current phase's tasks; no unplanned features.
-- No deletion or renaming of `PHASES.md`, `PLAN.lock`, `PROGRESS.md`, `AGENTS.md`.
-- No telemetry by default (DEC-0005); no license changes (DEC-0002).
-- Do not claim milestone acceptance unless the final handoff says `MILESTONE ACCEPTANCE CLAIMED: YES` and all
-  Definition of Done items in PHASES.md pass.
+## Handoff & acceptance
+Phase handoffs `records/phase-{N}-handoff.md` carry: completion state, FILES CHANGED,
+VALIDATIONS RUN + exit codes, UNRESOLVED GATES, EXACT NEXT ACTION. Final phase:
+`records/final-handoff.md` claims `MILESTONE ACCEPTANCE CLAIMED: YES` only when every
+Definition-of-Done item passes.
 
-## 7. If anything is ambiguous
-
-STOP and ask the human. Do not guess. An ambiguous instruction is never a license to edit the plan.
+## Ambiguity
+Stop and ask the human. An ambiguous instruction is never a license to edit the plan.
