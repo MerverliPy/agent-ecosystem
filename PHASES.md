@@ -144,6 +144,16 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Add CLI-specific tests plus a headless smoke (`deskagent chat` against a local Ollama model).
 - **Exit criteria:** `deskagent-cli` builds and passes tests; `run-all-checks.sh` stays green; live chat smoke succeeds over the core (not the GUI); the Tauri GUI still compiles and is marked "deferred."
 
+## Phase 8.5: DeskAgent TUI — mobile (Moshi/SSH) support <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 8 -->
+<!-- VALIDATE: bash scripts/plan-lock.sh verify && cd apps/deskagent && cargo test -p deskagent-cli && bash scripts/run-all-checks.sh -->
+- [x] Narrow-width mode: compact tab labels (`Mem (N)`), condensed chat/memory lines, min-size guard screen (< 40×12).
+- [x] Status bar: never truncate key hints + transient status; static backend/model/encryption info clips first.
+- [x] Mobile keys: `1`–`4` switch panes (outside Chat input), `Ctrl-Q` quits from any pane, `g` re-pins a scrolled chat; on-screen hints.
+- [x] crossterm mouse/touch capture (SSH only): scroll chat/memory/models, tap tab bar to switch, tap model row to select; keyboard-only fallback preserved.
+- [x] Tests: TestBackend renders at 40/50/60/120 cols, min-size guard, mouse events, mobile keys — `cargo test -p deskagent-cli` green.
+- [x] Portrait-size TUI demo GIF (`deskagent-tui-mobile-demo.gif`) + Moshi SSH connection docs in the CLI README.
+- **Exit criteria:** narrow-layout + guard + mobile-key + mouse tests green; wide-layout behavior unchanged; `run-all-checks.sh` stays green.
+
 ## Phase 9: SkillHub registry security (public multi-tenant) <!-- PENDING --> <!-- DEPENDS_ON: Phase 3 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && (cd apps/skillhub-registry && cargo test) && (cd apps/skillhub-cli && cargo test) && bash scripts/run-all-checks.sh -->
 - [ ] **MUST LAND FIRST:** normalize the package identifier model to a canonical `owner/name` used identically by schema and handlers; reset the runtime registry DB (no migration code) per the DECIDED note. The read/write key-space mismatch is unresolved until this lands — every later auth task depends on it.

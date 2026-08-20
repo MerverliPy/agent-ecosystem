@@ -6,7 +6,7 @@
 use std::io;
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use deskagent_core::approvals::{decide, list_cards, ApprovalCard};
 use deskagent_core::consolidation::{get_persona, Persona};
 use deskagent_core::runtime::registry::{BackendKind, ModelRegistry};
@@ -74,7 +74,6 @@ pub struct App {
     pub input: String,
     pub input_cursor: usize,
     pub chat_scroll: usize,
-    pub auto_scroll: bool,
     pub memory_scroll: usize,
     pub memories: Vec<MemoryEvent>,
     pub approvals: Vec<ApprovalCard>,
@@ -88,6 +87,7 @@ pub struct App {
     pub base_url: Option<String>,
     pub encryption: String,
     pub status: String,
+    pub last_size: (u16, u16),
     pub quit: bool,
 }
 
@@ -98,9 +98,13 @@ pub fn run_tui(
     dir: PathBuf,
 ) -> io::Result<()> {
     let mut terminal = ratatui::init();
+    // Mobile/touch terminals (Moshi iOS app over SSH): forward mouse/touch
+    // events so scroll and tap work. Keyboard remains the primary interface.
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::event::EnableMouseCapture);
     let mut app = App::new(store, dir, backend_override, base_url);
     app.refresh();
     let result = app.run(&mut terminal);
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableMouseCapture);
     ratatui::restore();
     result
 }
@@ -122,8 +126,7 @@ impl App {
             chat_lines: vec![],
             input: String::new(),
             input_cursor: 0,
-            chat_scroll: usize::MAX,
-            auto_scroll: true,
+            chat_scroll: 0,
             memory_scroll: 0,
             memories: vec![],
             approvals: vec![],
@@ -136,7 +139,8 @@ impl App {
             backend_override,
             base_url,
             encryption,
-            status: "loading…".to_string(),
+            status: String::new(),
+            last_size: crossterm::terminal::size().unwrap_or((80, 24)),
             quit: false,
         }
     }
@@ -148,10 +152,13 @@ impl App {
                 break;
             }
             match crossterm::event::read()? {
-                crossterm::event::Event::Key(key) if key.kind == crossterm::event::KeyEventKind::Press => {
+                crossterm::event::Event::Key(key)
+                    if key.kind == crossterm::event::KeyEventKind::Press =>
+                {
                     self.on_key(key)?;
                 }
-                crossterm::event::Event::Resize(_, _) => {}
+                crossterm::event::Event::Mouse(mouse) => self.on_mouse(mouse),
+                crossterm::event::Event::Resize(w, h) => self.last_size = (w, h),
                 _ => {}
             }
         }
@@ -166,7 +173,17 @@ impl App {
             KeyCode::BackTab => self.tab = self.tab.prev(),
             KeyCode::Esc => self.quit = true,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => self.quit = true,
+            // Mobile terminals (Moshi/SSH) may lack Esc; Ctrl-Q quits from any pane.
+            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => self.quit = true,
             KeyCode::Char('q') if self.tab != Tab::Chat => self.quit = true,
+            // 1-4 switch panes without Tab (iPhone accessory bar has no Shift+Tab).
+            // Chat is excluded: digits there are ordinary input.
+            KeyCode::Char(c) if self.tab != Tab::Chat && matches!(c, '1'..='4') => {
+                let idx = (c as u8 - b'1') as usize;
+                if let Some(t) = Tab::ALL.get(idx) {
+                    self.tab = *t;
+                }
+            }
             _ => match self.tab {
                 Tab::Chat => self.on_chat_key(key),
                 Tab::Memory => self.on_memory_key(key),
@@ -175,6 +192,62 @@ impl App {
             },
         }
         Ok(())
+    }
+
+    /// Touch/mouse input (SSH only — Mosh does not forward mouse events).
+    /// Scroll moves the active pane; a tap on the tab bar switches panes and a
+    /// tap on a model row selects it. Everything keyboard-only still works.
+    pub fn on_mouse(&mut self, m: MouseEvent) {
+        match m.kind {
+            MouseEventKind::ScrollDown => self.scroll_view(1),
+            MouseEventKind::ScrollUp => self.scroll_view(-1),
+            MouseEventKind::Down(_) => self.tap_at(m.row, m.column),
+            _ => {}
+        }
+    }
+
+    fn scroll_view(&mut self, delta: i32) {
+        match self.tab {
+            Tab::Chat => self.scroll_chat(delta),
+            Tab::Memory => self.scroll_memories(delta),
+            Tab::Models => {
+                if delta > 0 {
+                    self.model_sel = (self.model_sel + 1).min(self.models.len().saturating_sub(1));
+                } else {
+                    self.model_sel = self.model_sel.saturating_sub(1);
+                }
+            }
+            Tab::Tasks => {}
+        }
+    }
+
+    /// chat_scroll counts lines scrolled up from the bottom (0 = pinned to the
+    /// latest message). `g` re-pins; new messages never yank a scrolled view.
+    fn scroll_chat(&mut self, delta: i32) {
+        if delta > 0 {
+            self.chat_scroll = self.chat_scroll.saturating_add(1);
+        } else {
+            self.chat_scroll = self.chat_scroll.saturating_sub(1);
+        }
+    }
+
+    fn tap_at(&mut self, row: u16, column: u16) {
+        // Tab bar occupies the top three rows: tap switches panes (column / width
+        // maps onto the four equal tab slots).
+        if row < 3 && self.last_size.0 > 0 {
+            let idx = ((column as usize * Tab::ALL.len()) / self.last_size.0 as usize).min(Tab::ALL.len() - 1);
+            if let Some(t) = Tab::ALL.get(idx) {
+                self.tab = *t;
+            }
+            return;
+        }
+        // Models pane content starts at terminal row 4 (tab bar 3 + border 1).
+        if self.tab == Tab::Models && row >= 4 {
+            let idx = (row - 4) as usize;
+            if idx < self.models.len() {
+                self.model_sel = idx;
+            }
+        }
     }
 
     fn on_chat_key(&mut self, key: KeyEvent) {
@@ -264,6 +337,8 @@ impl App {
         }
         self.input.clear();
         self.input_cursor = 0;
+        // Sending always re-pins to the latest message (standard chat behavior).
+        self.chat_scroll = 0;
         let Some(session_id) = self.active_id.clone() else {
             self.status = "no active session".to_string();
             return;
@@ -415,9 +490,8 @@ impl App {
         }
         self.persona = get_persona(&self.store).ok().flatten();
         self.remembered = ModelRegistry::remembered_choice(&self.store);
-        if self.auto_scroll {
-            self.chat_scroll = usize::MAX;
-        }
+        // chat_scroll is preserved: when pinned (0) new messages stay pinned;
+        // when the user scrolled up, new messages never yank the view.
     }
 
     fn rebuild_chat(&mut self) {
@@ -669,5 +743,119 @@ mod tests {
         assert_eq!(app.memory_scroll, 1);
         app.scroll_memories(-99);
         assert_eq!(app.memory_scroll, 0);
+    }
+
+    // ---- mobile (Moshi iOS / SSH): keys, touch, scroll --------------------
+
+    fn model(name: &str) -> ModelInfo {
+        ModelInfo {
+            name: name.into(),
+            size_bytes: None,
+            family: None,
+            parameter_size: None,
+        }
+    }
+
+    fn mouse(kind: crossterm::event::MouseEventKind, row: u16, col: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn number_keys_switch_tabs_outside_chat() {
+        let mut app = app();
+        app.tab = Tab::Memory;
+        app.on_key(key(KeyCode::Char('3'))).unwrap();
+        assert_eq!(app.tab, Tab::Models);
+        app.on_key(key(KeyCode::Char('4'))).unwrap();
+        assert_eq!(app.tab, Tab::Tasks);
+        app.on_key(key(KeyCode::Char('1'))).unwrap();
+        assert_eq!(app.tab, Tab::Chat);
+        // on Chat, digits are ordinary input, not tab switches
+        app.on_key(key(KeyCode::Char('2'))).unwrap();
+        assert_eq!(app.tab, Tab::Chat);
+        assert_eq!(app.input, "2");
+    }
+
+    #[test]
+    fn ctrl_q_quits_from_any_tab() {
+        let mut app = app();
+        app.on_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL)).unwrap();
+        assert!(app.quit, "Ctrl-Q quits even from the chat tab");
+    }
+
+    #[test]
+    fn mouse_scroll_moves_chat_and_models() {
+        let mut app = app();
+        app.chat_lines.push(ChatLine { role: "user".into(), text: "x".into(), citations: 0 });
+        app.on_mouse(mouse(crossterm::event::MouseEventKind::ScrollDown, 10, 10));
+        assert_eq!(app.chat_scroll, 1, "scroll down moves chat up one line");
+        app.on_mouse(mouse(crossterm::event::MouseEventKind::ScrollUp, 10, 10));
+        assert_eq!(app.chat_scroll, 0);
+        // models list scroll
+        app.tab = Tab::Models;
+        app.models = vec![model("a"), model("b")];
+        app.on_mouse(mouse(crossterm::event::MouseEventKind::ScrollDown, 10, 10));
+        assert_eq!(app.model_sel, 1);
+        app.on_mouse(mouse(crossterm::event::MouseEventKind::ScrollDown, 10, 10));
+        assert_eq!(app.model_sel, 1, "clamps at the last model");
+        app.on_mouse(mouse(crossterm::event::MouseEventKind::ScrollUp, 10, 10));
+        assert_eq!(app.model_sel, 0);
+    }
+
+    #[test]
+    fn tap_on_tab_bar_switches_tabs() {
+        let mut app = app();
+        app.last_size = (80, 24);
+        app.tab = Tab::Chat;
+        app.on_mouse(mouse(
+            crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            1,
+            41,
+        ));
+        assert_eq!(app.tab, Tab::Models, "col 41 of 80 maps to the third tab");
+        app.on_mouse(mouse(
+            crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            0,
+            21,
+        ));
+        assert_eq!(app.tab, Tab::Memory, "col 21 of 80 maps to the second tab");
+    }
+
+    #[test]
+    fn tap_on_models_row_selects_model() {
+        let mut app = app();
+        app.last_size = (80, 24);
+        app.tab = Tab::Models;
+        app.models = vec![model("a"), model("b")];
+        // models pane content starts at terminal row 4 (tab bar 3 + border 1)
+        app.on_mouse(mouse(
+            crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            5,
+            2,
+        ));
+        assert_eq!(app.model_sel, 1);
+    }
+
+    #[test]
+    fn chat_scroll_pins_on_submit_and_g_types_normally() {
+        let mut app = app();
+        // 'g' is ordinary input in chat (no shortcut hijacks typing)
+        app.on_key(key(KeyCode::Char('g'))).unwrap();
+        assert_eq!(app.input, "g");
+        app.input.clear();
+        app.input_cursor = 0;
+        // scroll up with the mouse, then sending re-pins to the latest message
+        app.chat_lines.push(ChatLine { role: "user".into(), text: "hi".into(), citations: 0 });
+        app.on_mouse(mouse(crossterm::event::MouseEventKind::ScrollDown, 10, 10));
+        assert_eq!(app.chat_scroll, 1);
+        app.input = "hello".to_string();
+        app.input_cursor = app.input.len();
+        app.chat_submit();
+        assert_eq!(app.chat_scroll, 0, "submitting re-pins to the latest message");
     }
 }

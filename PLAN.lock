@@ -3,7 +3,7 @@
   "policy": "content-locked",
   "created_at": "2026-08-14T20:06:16Z",
   "approved_by": "human",
-  "content_sha256": "8d9253e4668ca5eb679ff95a5d66c81eeaef0045d235d832ea8d5074dc8ac884",
+  "content_sha256": "4f86e58bdb9666b5ee61161d865404b5797a6869ba0f3a297e76ed72cf01f7e4",
   "token_sha256": "52789fd21dcd022c13fde19eb35303264e954be2e4e447b0a4dafacc8dc55427",
   "history": [
     {
@@ -25,6 +25,11 @@
       "action": "approve",
       "at": "2026-08-15T15:32:49Z",
       "reason": "Milestone 2 — Phases 8-10 approved"
+    },
+    {
+      "action": "approve",
+      "at": "2026-08-20T03:10:53Z",
+      "reason": "Mobile support for the DeskAgent TUI in the\n Moshi iOS app over SSH"
     }
   ]
 }

@@ -50,13 +50,36 @@ override the runtime; a model given with `--model` is remembered as the default.
 | Key | Where | Action |
 |-----|-------|--------|
 | `Tab` / `Shift-Tab` | anywhere | switch pane |
-| `Esc` / `Ctrl-C` | anywhere | quit |
-| `Enter` | Chat | send the input line |
+| `1`–`4` | any pane except Chat input | switch pane (no `Tab` needed — mobile-friendly) |
+| `Esc` / `Ctrl-C` / `Ctrl-Q` | anywhere | quit |
+| `Enter` | Chat | send the input line (re-pins a scrolled chat to the latest message) |
 | `y` / `n` | Memory+Approvals | approve / reject the `▶` approval card (inline) |
 | `j` / `k` | Memory / Models | scroll / move selection |
 | `Enter` / `m` | Models | remember the selected model |
 | `r` | Memory / Models | reload |
 | `e` | Memory | export memories to a JSON file in the data dir |
+| scroll / tap | anywhere | scroll the active pane (SSH only); tap the tab bar to switch panes, tap a model row to select |
+
+## Mobile (Moshi iOS app over SSH)
+
+The TUI adapts to narrow terminals (iPhone portrait is ~40–60 columns):
+
+- **Compact layout** below ~100 columns: short tab labels (`Mem (5)`), condensed
+  citation lines, tighter truncation. Below 40×12 a guard screen explains the
+  minimum size instead of rendering garbled panes.
+- **Status bar** is mobile-first: key hints (`1-4 pane · Esc`) and the transient
+  status (approvals, citations) are always visible; the static backend/model/
+  encryption info clips first on narrow terminals.
+- **Keys** work with the iOS accessory bar: `1`–`4` switch panes (no Shift+Tab),
+  `Esc`/`Ctrl-C`/`Ctrl-Q` quit; every character key stays ordinary input in chat.
+- **Touch/mouse** (SSH only — Mosh does not forward mouse events): scroll the
+  active pane (scrolling down past the latest message re-pins it), tap the tab
+  bar to switch, tap a model row to select.
+
+![DeskAgent TUI — mobile portrait demo](apps/deskagent/docs/assets/deskagent-tui-mobile-demo.gif)
+
+Connect from the Moshi app with SSH (`ssh user@host` then `deskagent`), or point
+`DESKAGENT_DATA_DIR` at a shared store to keep the same memories as the desktop CLI.
 
 ## Chat engine (DEC-0005, DEC-0009)
 

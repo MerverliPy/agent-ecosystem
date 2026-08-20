@@ -10,29 +10,46 @@ use ratatui::Frame;
 
 use crate::app::{App, Tab};
 
+/// Minimum usable terminal size; below this a guard screen is shown instead of
+/// garbled panes. iPhone portrait via Moshi is ~40 columns, so this is generous.
+pub const MIN_COLS: u16 = 40;
+pub const MIN_ROWS: u16 = 12;
+
+/// Compact (narrow) layout kicks in below this width — targets iPhone portrait.
+pub fn compact(width: u16) -> bool {
+    width < 100
+}
+
 pub fn draw(f: &mut Frame, app: &App) {
     let [tabs_area, body, status_area] =
         Layout::vertical([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)]).areas(f.area());
-    draw_tabs(f, app, tabs_area);
+    let width = f.area().width;
+    if width < MIN_COLS || f.area().height < MIN_ROWS {
+        draw_too_small(f, app, f.area());
+        return;
+    }
+    draw_tabs(f, app, tabs_area, width);
     match app.tab {
-        Tab::Chat => draw_chat(f, app, body),
-        Tab::Memory => draw_memory(f, app, body),
-        Tab::Models => draw_models(f, app, body),
+        Tab::Chat => draw_chat(f, app, body, width),
+        Tab::Memory => draw_memory(f, app, body, width),
+        Tab::Models => draw_models(f, app, body, width),
         Tab::Tasks => draw_tasks(f, app, body),
     }
-    draw_status(f, app, status_area);
+    draw_status(f, app, status_area, width);
 }
 
-fn draw_tabs(f: &mut Frame, app: &App, area: Rect) {
+fn draw_tabs(f: &mut Frame, app: &App, area: Rect, width: u16) {
+    let narrow = compact(width);
     let titles: Vec<Line> = Tab::ALL
         .iter()
         .map(|t| {
             let title = t.title();
-            let count = match t {
+            let label = match t {
+                Tab::Memory if narrow => format!(" Mem ({}) ", app.pending.len()),
                 Tab::Memory => format!(" {title} ({}) ", app.pending.len()),
                 _ => format!(" {title} "),
             };
-            Line::from(count)
+            Line::from(label)
         })
         .collect();
     let tabs = Tabs::new(titles)
@@ -42,8 +59,24 @@ fn draw_tabs(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(tabs, area);
 }
 
-fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default().title(chat_title(app)).borders(Borders::ALL);
+/// Guard screen for terminals too small to lay out the four panes.
+fn draw_too_small(f: &mut Frame, _app: &App, area: Rect) {
+    let msg = format!(
+        "Terminal too small — need at least {MIN_COLS}×{MIN_ROWS} (widen or rotate your phone)."
+    );
+    let lines = vec![
+        Line::from(Span::styled(msg, Style::default().fg(Color::Yellow))),
+        Line::from(""),
+        Line::from(Span::styled(
+            "deskagent · Esc: quit",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+}
+
+fn draw_chat(f: &mut Frame, app: &App, area: Rect, width: u16) {
+    let block = Block::default().title(chat_title(app, width)).borders(Borders::ALL);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let [msgs_area, input_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
@@ -60,10 +93,13 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
             Span::raw(&m.text),
         ]));
         if m.role == "assistant" && m.citations > 0 {
-            lines.push(Line::from(Span::styled(
-                format!("  ↳ recalled {} memory/memories", m.citations),
-                Style::default().fg(Color::DarkGray),
-            )));
+            let n = m.citations;
+            let cite = if compact(width) {
+                format!("  ↳ {n} cited")
+            } else {
+                format!("  ↳ recalled {n} memory/memories")
+            };
+            lines.push(Line::from(Span::styled(cite, Style::default().fg(Color::DarkGray))));
         }
     }
     if lines.is_empty() {
@@ -74,14 +110,21 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
     }
     let visible = msgs_area.height as usize;
     let max_scroll = lines.len().saturating_sub(visible);
-    let scroll = app.chat_scroll.min(max_scroll) as u16;
-    let chat = Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((scroll, 0));
+    // chat_scroll = lines scrolled up from the bottom (0 = pinned to latest).
+    let top = max_scroll.saturating_sub(app.chat_scroll.min(max_scroll));
+    let chat = Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((top as u16, 0));
     f.render_widget(chat, msgs_area);
 
-    let prompt = Line::from(vec![
+    let mut prompt = Line::from(vec![
         Span::raw("> "),
         Span::styled(&app.input, Style::default().fg(Color::Yellow)),
     ]);
+    if app.chat_scroll > 0 {
+        prompt.spans.push(Span::styled(
+            "  [scrolled — scroll down]",
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
     f.render_widget(Paragraph::new(prompt), input_area);
 
     if app.tab == Tab::Chat {
@@ -92,16 +135,17 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn chat_title(app: &App) -> String {
+fn chat_title(app: &App, width: u16) -> String {
     let session = app
         .active_id
         .as_ref()
         .and_then(|id| app.sessions.iter().find(|s| &s.id == id));
     let title = session.map(|s| s.title.clone()).unwrap_or_else(|| "no session".to_string());
+    let title = truncate(&title, if compact(width) { 18 } else { 60 });
     format!(" Chat — {title} ")
 }
 
-fn draw_memory(f: &mut Frame, app: &App, area: Rect) {
+fn draw_memory(f: &mut Frame, app: &App, area: Rect, width: u16) {
     let block = Block::default().title(" Memory+Approvals ").borders(Borders::ALL);
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -152,7 +196,7 @@ fn draw_memory(f: &mut Frame, app: &App, area: Rect) {
             ListItem::new(Line::from(vec![
                 Span::styled(marker, Style::default().fg(Color::Yellow)),
                 Span::styled(format!("[{}] ", short(&c.id)), Style::default().fg(Color::DarkGray)),
-                Span::raw(truncate(&c.description, 200)),
+                Span::raw(truncate(&c.description, if compact(width) { 80 } else { 200 })),
             ]))
         })
         .collect();
@@ -181,7 +225,7 @@ fn draw_memory(f: &mut Frame, app: &App, area: Rect) {
                     format!("] conf {:.2} · ", m.confidence),
                     Style::default().fg(Color::DarkGray),
                 ),
-                Span::raw(truncate(&m.content, 220)),
+                Span::raw(truncate(&m.content, if compact(width) { 80 } else { 220 })),
             ])
         })
         .collect();
@@ -198,7 +242,7 @@ fn draw_memory(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(memories_para, memories_area);
 }
 
-fn draw_models(f: &mut Frame, app: &App, area: Rect) {
+fn draw_models(f: &mut Frame, app: &App, area: Rect, width: u16) {
     let block = Block::default().title(" Models ").borders(Borders::ALL);
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -243,10 +287,17 @@ fn draw_models(f: &mut Frame, app: &App, area: Rect) {
         .as_ref()
         .map(|(k, m)| format!("{}/{}", k.as_str(), m))
         .unwrap_or_else(|| "none yet".to_string());
-    let hint = Line::from(vec![
-        Span::raw("Enter/m: pick · r: reload · j/k: move · "),
-        Span::styled(format!("remembered: {remembered}"), Style::default().fg(Color::Green)),
-    ]);
+    let hint = if compact(width) {
+        Line::from(vec![
+            Span::raw("Enter: pick · r: reload · "),
+            Span::styled(format!("remembered: {remembered}"), Style::default().fg(Color::Green)),
+        ])
+    } else {
+        Line::from(vec![
+            Span::raw("Enter/m: pick · r: reload · j/k: move · "),
+            Span::styled(format!("remembered: {remembered}"), Style::default().fg(Color::Green)),
+        ])
+    };
     f.render_widget(Paragraph::new(hint), hint_area);
 }
 
@@ -277,7 +328,7 @@ fn draw_tasks(f: &mut Frame, _app: &App, area: Rect) {
     );
 }
 
-fn draw_status(f: &mut Frame, app: &App, area: Rect) {
+fn draw_status(f: &mut Frame, app: &App, area: Rect, width: u16) {
     let backend = app
         .backend_override
         .map(|k| k.as_str())
@@ -287,12 +338,27 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
         .as_ref()
         .map(|(_, m)| m.as_str())
         .unwrap_or("-");
+    // Mobile-first ordering: hints and the transient status are always visible;
+    // the static info sits at the right edge and clips first on narrow terminals.
+    let (hints, status_cap) = if width >= 100 {
+        (" Tab: switch · 1-4 pane · Esc/Ctrl-C: quit ", 60)
+    } else if width >= 60 {
+        (" 1-4 pane · Esc: quit · y/n approve ", 26)
+    } else {
+        (" 1-4 pane · Esc ", 14)
+    };
+    let status = truncate(app.status.trim(), status_cap);
+    let status_span = if status.is_empty() {
+        String::new()
+    } else {
+        format!("  {status}")
+    };
+    let info = format!("· {} · backend {backend} · model {model} · {}", app.tab.title(), app.encryption);
     let line = Line::from(vec![
         Span::styled(" deskagent ", Style::default().bg(Color::Cyan).fg(Color::Black)),
-        Span::raw(format!(" · {} ", app.tab.title())),
-        Span::raw(format!("· backend {backend} · model {model} · {}", app.encryption)),
-        Span::raw("   Tab: switch · Esc/Ctrl-C: quit"),
-        Span::styled(format!("  {}", app.status), Style::default().fg(Color::DarkGray)),
+        Span::raw(hints),
+        Span::styled(status_span, Style::default().fg(Color::DarkGray)),
+        Span::raw(format!("  {info}")),
     ]);
     f.render_widget(Paragraph::new(line), area);
 }
@@ -441,5 +507,52 @@ mod tests {
         let text = buffer_text(&terminal);
         assert!(text.contains("encrypted"));
         assert!(text.contains("backend"));
+    }
+
+    // ---- mobile (Moshi iOS / SSH): narrow layout, guard, status -----------
+
+    fn render_size(app: &App, w: u16, h: u16) -> Terminal<TestBackend> {
+        let backend = TestBackend::new(w, h);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| draw(f, app)).unwrap();
+        terminal
+    }
+
+    #[test]
+    fn narrow_layout_uses_compact_tab_labels() {
+        let app = app();
+        let terminal = render_size(&app, 60, 24);
+        let text = buffer_text(&terminal);
+        assert!(text.contains(" Mem (0) "), "compact memory tab label at 60 cols");
+        assert!(text.contains(" Chat "));
+        assert!(text.contains(" Models "));
+        assert!(!text.contains("Memory+Approvals ("), "full label replaced on narrow terminals");
+    }
+
+    #[test]
+    fn tiny_terminal_shows_guard_screen() {
+        let app = app();
+        let terminal = render_size(&app, 30, 10);
+        let text = buffer_text(&terminal);
+        assert!(text.contains("too small"));
+    }
+
+    #[test]
+    fn narrow_status_keeps_hints_and_transient_status() {
+        let mut app = app();
+        app.status = "approved appr-abc (+0.15 confidence)".to_string();
+        let terminal = render_size(&app, 50, 20);
+        let text = buffer_text(&terminal);
+        assert!(text.contains("1-4 pane"), "narrow key hints visible");
+        assert!(text.contains("approved appr"), "transient status visible on a narrow terminal");
+    }
+
+    #[test]
+    fn wide_status_keeps_backend_and_encryption_info() {
+        let app = app();
+        let terminal = render_size(&app, 120, 40);
+        let text = buffer_text(&terminal);
+        assert!(text.contains("backend remembered"));
+        assert!(text.contains("encrypted"));
     }
 }
