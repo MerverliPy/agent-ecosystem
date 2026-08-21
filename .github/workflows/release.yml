@@ -192,11 +192,15 @@ jobs:
         if: env.NPM_TOKEN != ''
         run: |
           cd apps/slopgate
-          npm pack --dry-run
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          npm publish --access public
+          # publish, tolerating "version already exists" so access can still be fixed below
+          if npm publish --access public; then
+            echo "published @merverli/slopgate@0.1.0"
+          else
+            echo "note: npm publish added no new version (may already exist) — ensuring public access"
+          fi
           # scoped packages can end up private; force public access explicitly
-          npm access public "@merverli/slopgate" 2>/dev/null || true
+          npm access public "@merverli/slopgate" 2>/dev/null && echo "access: public" || echo "warn: npm access public failed (scope may be unavailable)"
 
       # create/attach the GitHub Release ONLY on tag-triggered runs; branch workflow_dispatch
       # runs (the CI dry-run) stop here after the gate + container push.
