@@ -30,3 +30,5 @@ pi-session-*.html
 
 # Pi project-local config (prompts, agents, settings)
 .pi/
+# npm publish tarballs (generated build artifacts)
+*.tgz
