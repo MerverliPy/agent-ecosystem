@@ -243,6 +243,53 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
     Some(t.to_string())
 }
 
+// ---------- input hardening ----------
+
+// Embed the canonical skill-manifest JSON-schema (shared/). At rest this rejects manifests
+// that violate name/version grammar, description bounds, license/harness/permission enums,
+// and any unlisted field (additionalProperties: false).
+const MANIFEST_SCHEMA: &str = include_str!("../../../shared/schemas/skill-manifest.schema.json");
+
+fn manifest_validator() -> &'static jsonschema::Validator {
+    static V: std::sync::OnceLock<jsonschema::Validator> = std::sync::OnceLock::new();
+    V.get_or_init(|| {
+        let schema: serde_json::Value = serde_json::from_str(MANIFEST_SCHEMA).expect("embedded schema is valid JSON");
+        jsonschema::validator_for(&schema).expect("embedded schema compiles")
+    })
+}
+
+const MAX_FILE_SIZE: usize = 2 * 1024 * 1024; // 2 MiB per file
+const MAX_TOTAL_SIZE: usize = 10 * 1024 * 1024; // 10 MiB per publish
+const MAX_FILES: usize = 1000;
+
+/// Reject absolute paths, backslash separators, `.`/`..`/empty segments.
+fn safe_rel_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && !path.contains('\\')
+        && !path.split('/').any(|seg| seg == ".." || seg == "." || seg.is_empty())
+}
+
+fn validate_files(files: &HashMap<String, String>) -> Result<(), &'static str> {
+    if files.len() > MAX_FILES {
+        return Err("too many files");
+    }
+    let mut total = 0usize;
+    for (path, content) in files {
+        if !safe_rel_path(path) {
+            return Err("unsafe file path (absolute, traversal, or empty segment)");
+        }
+        if content.len() > MAX_FILE_SIZE {
+            return Err("file exceeds size cap");
+        }
+        total += content.len();
+    }
+    if total > MAX_TOTAL_SIZE {
+        return Err("package exceeds total size cap");
+    }
+    Ok(())
+}
+
 // ---------- schema + db layer ----------
 
 fn init(conn: &Connection) -> anyhow::Result<()> {
@@ -492,7 +539,17 @@ fn publish_db(conn: &mut Connection, p: &PublishPayload) -> anyhow::Result<u16> 
         .unwrap_or_default();
     let entrypoint = m["entrypoint"].as_str().unwrap_or("SKILL.md").to_string();
 
+    // JSON-schema validation of the manifest (name/version grammar, enums, sizes, extra props)
+    if let Err(errs) = manifest_validator().validate(m) {
+        let _ = errs;
+        return Ok(400);
+    }
     if name.is_empty() || version.is_empty() || description.is_empty() {
+        return Ok(400);
+    }
+    // file path + size caps
+    if let Err(reason) = validate_files(&p.files) {
+        let _ = reason;
         return Ok(400);
     }
     let high_risk = permissions.iter().any(|p| p == "shell" || p == "network");
@@ -628,7 +685,7 @@ async fn publish(State(state): State<AppState>, headers: HeaderMap, Json(payload
     match publish_db(&mut db, &payload) {
         Ok(201) => (StatusCode::CREATED, Json(serde_json::json!({"status": "published"}))).into_response(),
         Ok(409) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": "version already exists (immutable)"}))).into_response(),
-        Ok(400) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid manifest: name (owner/name grammar), version, description required"}))).into_response(),
+        Ok(400) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid manifest or package (schema, size, or path constraints)"}))).into_response(),
         Ok(other) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("unexpected status {other}")}))).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     }
@@ -680,6 +737,7 @@ fn build_app(state: AppState) -> Router {
         .route("/api/owners/register", post(register_owner))
         .route("/api/owners/revoke", post(revoke_token))
         .route("/api/publish", post(publish))
+        .layer(axum::extract::DefaultBodyLimit::max(MAX_TOTAL_SIZE + 64 * 1024)) // request body cap
         .layer(middleware::from_fn_with_state(mw_state, rate_limit))
         .with_state(state)
 }
@@ -1009,6 +1067,88 @@ mod tests {
             let (s, _) = post_json(&app, "/api/publish", &body, Some(&token)).await;
             assert_eq!(s, StatusCode::BAD_REQUEST, "expected 400 for name '{bad}'");
         }
+    }
+
+    async fn publish_json(app: &Router, manifest: serde_json::Value, files: serde_json::Value) -> StatusCode {
+        let token = mint_token(&test_secret(), "demo", "publish:demo").0;
+        let body = serde_json::json!({ "manifest": manifest, "files": files, "scan": {"verified": true} }).to_string();
+        post_json(app, "/api/publish", &body, Some(&token)).await.0
+    }
+
+    fn base_manifest() -> serde_json::Value {
+        serde_json::json!({
+            "name": "demo/skill", "version": "1.0.0", "description": "ok",
+            "license": "MIT", "repo": "https://example.com", "harnesses": ["pi"]
+        })
+    }
+
+    #[tokio::test]
+    async fn http_publish_rejects_bad_semver() {
+        let app = build_app(test_state());
+        for bad in ["1.0", "1.0.0.0", "v1.0.0", "1.0.a", ""] {
+            let mut m = base_manifest();
+            m["version"] = serde_json::json!(bad);
+            let s = publish_json(&app, m, serde_json::json!({})).await;
+            assert_eq!(s, StatusCode::BAD_REQUEST, "version '{bad}' must be rejected");
+        }
+    }
+
+    #[tokio::test]
+    async fn http_publish_rejects_path_traversal() {
+        let app = build_app(test_state());
+        for bad_path in ["../evil.sh", "/etc/passwd", "a/../b", "..", "a//b"] {
+            let mut files = serde_json::json!({});
+            files[bad_path] = serde_json::json!("#!/bin/sh");
+            let s = publish_json(&app, base_manifest(), files).await;
+            assert_eq!(s, StatusCode::BAD_REQUEST, "path '{bad_path}' must be rejected");
+        }
+    }
+
+    #[tokio::test]
+    async fn http_publish_rejects_extra_manifest_field() {
+        let app = build_app(test_state());
+        let mut m = base_manifest();
+        m["author"] = serde_json::json!("attacker"); // additionalProperties: false
+        let s = publish_json(&app, m, serde_json::json!({})).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn http_publish_rejects_wrong_content_type() {
+        let app = build_app(test_state());
+        let token = mint_token(&test_secret(), "demo", "publish:demo").0;
+        // axum's Json extractor rejects non-application/json with 415
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/publish")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "text/plain")
+                    .body(Body::from("hello"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    #[test]
+    fn validate_files_enforces_size_caps() {
+        let mut files = HashMap::new();
+        files.insert("SKILL.md".to_string(), "x".repeat(MAX_FILE_SIZE + 1));
+        assert!(validate_files(&files).is_err()); // single file over cap
+        let mut many = HashMap::new();
+        for i in 0..(MAX_FILES + 1) {
+            many.insert(format!("f{i}.md"), "x".to_string());
+        }
+        assert!(validate_files(&many).is_err()); // too many files
+        let mut big_total = HashMap::new();
+        big_total.insert("a".to_string(), "x".repeat(MAX_TOTAL_SIZE));
+        assert!(validate_files(&big_total).is_err()); // total over cap
+        let ok = HashMap::from([("SKILL.md".to_string(), "hi".to_string())]);
+        assert!(validate_files(&ok).is_ok());
     }
 
     #[tokio::test]

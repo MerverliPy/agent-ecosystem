@@ -827,3 +827,9 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 15/15 — +3); cargo build registry (exit 0); demo skillhub-install-demo.sh (exit 0, unaffected by limits)
 - EXIT CODES: verify 0; registry test 0; build 0; demo 0
 - Lock verify: PASS
+
+### Task done: Harden input validation (semver, JSON-schema, size caps, path traversal, content-type, body cap)
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (embedded shared skill-manifest schema via include_str!; jsonschema::Validator OnceLock; publish_db validates manifest against schema → 400; validate_files + safe_rel_path [abs/backslash/../empty-segment] + MAX_FILE_SIZE 2MiB / MAX_TOTAL_SIZE 10MiB / MAX_FILES 1000; DefaultBodyLimit on router; content-type enforced by axum Json extractor → 415; 400 message generalized; +5 tests [bad semver, path traversal, extra field, content-type 415, size caps unit]); Cargo.toml (+jsonschema 0.24)
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 20/20 — +5); demo skillhub-install-demo.sh (exit 0, CLI manifest with dependencies:[] still passes strict schema)
+- EXIT CODES: verify 0; registry test 0; demo 0
+- Lock verify: PASS
