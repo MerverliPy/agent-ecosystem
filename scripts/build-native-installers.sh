@@ -48,9 +48,8 @@ if command -v rpmbuild >/dev/null 2>&1; then
     [ -f "$bin" ] || { echo "skip .rpm for $name (no $bin)" >&2; return; }
     local d; d="$(mktemp -d)"
     mkdir -p "$d/BUILD" "$d/RPMS" "$d/SOURCES" "$d/SPECS" "$d/tmp"
-    local staged="$d/staged"
-    mkdir -p "$staged/usr/bin"
-    install -m 0755 "$bin" "$staged/usr/bin/$name"
+    # stage the binary as a Source; %files uses the %{name} macro (rpmbuild does not shell-expand)
+    cp "$bin" "$d/SOURCES/$pkg"
     cat > "$d/SPECS/$pkg.spec" <<EOF
 Name: $pkg
 Version: ${VER}
@@ -64,15 +63,12 @@ $name — an agent-ecosystem command-line tool.
 
 %install
 mkdir -p %{buildroot}/usr/bin
-install -m 0755 $staged/usr/bin/$name %{buildroot}/usr/bin/$name
+install -m 0755 %{_sourcedir}/$pkg %{buildroot}/usr/bin/%{name}
 
 %files
-/usr/bin/$name
-
-%post
-echo "$name installed"
+/usr/bin/%{name}
 EOF
-    rpmbuild --define "_topdir $d" --define "_buildroot $staged" -bb "$d/SPECS/$pkg.spec" >/dev/null 2>&1 \
+    rpmbuild --define "_topdir $d" -bb "$d/SPECS/$pkg.spec" >/dev/null 2>&1 \
       && cp "$d/RPMS/$ARCH/${pkg}-${VER}-1.${ARCH}.rpm" "$DIR/" && echo "  built $DIR/${pkg}-${VER}-1.${ARCH}.rpm" || echo "  warn rpmbuild failed for $name"
     rm -rf "$d"
   }
