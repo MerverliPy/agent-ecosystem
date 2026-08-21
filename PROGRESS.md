@@ -864,3 +864,28 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 28/28 — +1); cargo test CLI (exit 0, 9/9); run-all-checks.sh (exit 0, 21/21, RUN-ALL-CHECKS-OK)
 - EXIT CODES: verify 0; registry test 0; CLI test 0; run-all-checks 0
 - Lock verify: PASS
+
+## Phase 9 post-phase
+
+**Phase status:** COMPLETE (2026-08-21)
+- VALIDATE hook: `plan-lock.sh verify` exit 0 · `cargo test` (registry) 28/28 · `cargo test` (CLI) 9/9 · `run-all-checks.sh` 21/21 (RUN-ALL-CHECKS-OK).
+- Exit criteria met: unauthenticated publish rejected; unauthorized owner publish rejected; malicious fixtures fail validation; verified packages remain anonymously readable; all adversarial + existing tests green.
+- Handoff: `records/phase-9-handoff.md` — 11/11 tasks, no blocked gates.
+
+---
+
+## Phase 10: Release and versioned distribution <!-- PENDING -->
+
+**Phase status:** PENDING (not started)
+**Checkpoint tag:** (create `phase-10-start` before first task)
+**Note:** Phase 10 depends on Phase 8 (COMPLETE) + Phase 9 (COMPLETE). Release-only script `scripts/release-gate.sh` must NOT loosen run-all-checks.sh. DeskAgent GUI stays excluded/deferred. `release-gate.sh` is release-only, not part of general validation.
+
+Mirrored tasks:
+- [ ] Establish unified versioning: single semver source per product, `CHANGELOG.md`, git tags mapping to releases.
+- [ ] Build a GitHub Actions release pipeline (tag → build → sign → publish) with linux (amd64/arm64) + macOS (arm64/amd64) matrix; DEC-0005 compliant (no telemetry).
+- [ ] Produce CLI installers via `cargo dist`/`cargo-binstall` for `skillhub` and `deskagent`, plus `install.sh`/Homebrew/`.deb`/`.rpm`.
+- [ ] Build a registry container image (Dockerfile) plus systemd/compose units so the secured registry is deployable.
+- [ ] Produce web distribution: static builds for `bench-site`, `skillhub-web`, `slopgate-dash` with a named deploy target.
+- [ ] Publish `slopgate` as an npm package/tarball and `slopgate-action` as a versioned GitHub Action.
+- [ ] Add release-artifact signing and provenance (checksums, signing keys, SBOM); defer code-signing policy to the GUI milestone but plan key rotation.
+- [ ] Add a separate `scripts/release-gate.sh` (artifact presence, checksum verification, version consistency) wired into the CI tag pipeline; add version/self-update or binstall upgrade paths for CLI products.
