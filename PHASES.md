@@ -169,7 +169,7 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Add an adversarial security test suite (path traversal, oversized, bad semver, unauthorized, signature mismatch) and keep the existing registry unit tests green.
 - **Exit criteria:** unauthenticated publish is rejected; unauthorized owner publish is rejected; malicious fixtures fail validation; verified packages remain anonymously readable; all adversarial + existing tests green.
 
-## Phase 10: Release and versioned distribution <!-- IN_PROGRESS --> <!-- DEPENDS_ON: Phase 8, Phase 9 -->
+## Phase 10: Release and versioned distribution <!-- COMPLETE --> <!-- DEPENDS_ON: Phase 8, Phase 9 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && bash scripts/run-all-checks.sh && bash scripts/plan-lock.sh status -->
 - [x] Establish unified versioning: single semver source per product, `CHANGELOG.md`, git tags mapping to releases.
 - [x] Build a GitHub Actions release pipeline (tag → build → sign → publish) with a linux (amd64/arm64) + macOS (arm64/amd64) matrix; DEC-0005 compliant (no telemetry).

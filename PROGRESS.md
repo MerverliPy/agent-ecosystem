@@ -938,3 +938,11 @@ Mirrored tasks:
 - VALIDATIONS RUN: built skillhub + deskagent release binaries → assembled dist/release → sign + sbom → bash scripts/release-gate.sh dist/release (exit 0, RELEASE-GATE-OK all 6 checks); run-all-checks.sh still green (gate not wired into it)
 - EXIT CODES: release-gate 0
 - Lock verify: PASS
+
+## Phase 10 post-phase — MILESTONE 2 COMPLETE
+
+**Phase status:** COMPLETE (2026-08-21)
+- VALIDATE hook: `plan-lock.sh verify` exit 0 · `run-all-checks.sh` 21/21 (RUN-ALL-CHECKS-OK) · `plan-lock.sh status` OK.
+- Exit criteria met: release pipeline configured (tag → build → sign → publish, linux+macOS matrix); `release-gate.sh` passes locally on real built artifacts; secured registry deployable from its container (validated build+run); no runtime DB / seed token / signing secret baked into any artifact; DeskAgent GUI remains excluded/deferred.
+- Handoff: `records/final-handoff.md` — MILESTONE ACCEPTANCE CLAIMED: YES (conditional on external tag-push/CI publish).
+- Next action (human): push tag `v0.1.0` to trigger `.github/workflows/release.yml`; optionally `npm publish` from `apps/slopgate`.
