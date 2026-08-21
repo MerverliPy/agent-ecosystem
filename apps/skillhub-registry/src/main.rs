@@ -16,7 +16,7 @@
 // canonical `owner/name` model. No migration code ships — `init()` creates the schema fresh.
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -31,6 +31,9 @@ type Db = Arc<Mutex<Connection>>;
 #[derive(Clone)]
 struct AppState {
     db: Db,
+    /// HMAC signing secret for capability tokens. From env SKILLHUB_REGISTRY_SECRET
+    /// (never logged, never embedded in code); a random in-process secret is used in dev.
+    secret: Vec<u8>,
 }
 
 /// Validate a single `owner` or `name` segment against the canonical grammar
@@ -57,6 +60,101 @@ fn canonical_id(id: &str) -> Result<String, String> {
         ));
     }
     Ok(format!("{owner}/{name}"))
+}
+
+// ---------- capability tokens (self-contained, HMAC-signed) ----------
+// A token is `base64url(claims).hex_hmac(secret)` where claims = {sub, scope, jti, exp}.
+// Self-contained per DECIDED #2 (no external IdP); the registry secret authenticates them.
+// Tokens are per-owner and scoped (e.g. `publish:<owner>`); revocation is layered in later.
+
+#[derive(Debug, Clone)]
+struct Claims {
+    sub: String,
+    scope: String,
+    jti: String,
+    exp: i64,
+}
+
+fn b64url(data: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
+}
+
+fn b64url_decode(s: &str) -> Option<Vec<u8>> {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(s).ok()
+}
+
+fn hmac_hex(secret: &[u8], data: &[u8]) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    let mut mac = <Hmac<Sha256>>::new_from_slice(secret).expect("hmac accepts any key length");
+    mac.update(data);
+    mac.finalize().into_bytes().iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+fn now_epoch() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64
+}
+
+fn random_hex() -> String {
+    use rand::Rng;
+    let bytes: [u8; 16] = rand::thread_rng().gen();
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+fn constant_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Mint a scoped capability token for an owner. Default expiry 30 days.
+fn mint_token(secret: &[u8], owner: &str, scope: &str) -> String {
+    let claims = serde_json::json!({
+        "sub": owner, "scope": scope, "jti": random_hex(), "exp": now_epoch() + 86400 * 30
+    })
+    .to_string();
+    let enc = b64url(claims.as_bytes());
+    let sig = hmac_hex(secret, enc.as_bytes());
+    format!("{enc}.{sig}")
+}
+
+/// Verify a token's signature + expiry; returns its claims, or None if invalid.
+fn verify_token(secret: &[u8], token: &str) -> Option<Claims> {
+    let (enc, sig) = token.split_once('.')?;
+    let expected = hmac_hex(secret, enc.as_bytes());
+    if !constant_eq(sig.as_bytes(), expected.as_bytes()) {
+        return None;
+    }
+    let payload = b64url_decode(enc)?;
+    let v: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    let claims = Claims {
+        sub: v.get("sub")?.as_str()?.to_string(),
+        scope: v.get("scope")?.as_str()?.to_string(),
+        jti: v.get("jti")?.as_str()?.to_string(),
+        exp: v.get("exp")?.as_i64()?,
+    };
+    if claims.exp < now_epoch() {
+        return None;
+    }
+    Some(claims)
+}
+
+/// Extract a `Bearer <token>` from the Authorization header.
+fn bearer_token(headers: &HeaderMap) -> Option<String> {
+    let h = headers.get(axum::http::header::AUTHORIZATION)?;
+    let s = h.to_str().ok()?;
+    let t = s.strip_prefix("Bearer ")?;
+    if t.is_empty() {
+        return None;
+    }
+    Some(t.to_string())
 }
 
 // ---------- schema + db layer ----------
@@ -89,6 +187,10 @@ fn init(conn: &Connection) -> anyhow::Result<()> {
             path TEXT NOT NULL,
             content TEXT NOT NULL,
             PRIMARY KEY (name, version, path)
+        );
+        CREATE TABLE IF NOT EXISTS owners (
+            owner TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL
         );",
     )?;
     Ok(())
@@ -349,7 +451,55 @@ fn publish_db(conn: &mut Connection, p: &PublishPayload) -> anyhow::Result<u16> 
     Ok(201)
 }
 
-async fn publish(State(state): State<AppState>, Json(payload): Json<PublishPayload>) -> impl IntoResponse {
+#[derive(Debug, Deserialize)]
+struct RegisterReq {
+    owner: String,
+}
+
+/// Register an owner and mint its first capability token (self-issued, scoped to `publish:<owner>`).
+async fn register_owner(State(state): State<AppState>, Json(payload): Json<RegisterReq>) -> impl IntoResponse {
+    if !valid_segment(&payload.owner) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid owner — must match [a-z0-9][a-z0-9-]*"}))).into_response();
+    }
+    let db = state.db.lock().unwrap();
+    if let Err(e) = db.execute(
+        "INSERT OR IGNORE INTO owners (owner, created_at) VALUES (?1, ?2)",
+        rusqlite::params![payload.owner, now_iso()],
+    ) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+    }
+    let token = mint_token(&state.secret, &payload.owner, &format!("publish:{}", payload.owner));
+    (StatusCode::CREATED, Json(serde_json::json!({"owner": payload.owner, "token": token}))).into_response()
+}
+
+async fn publish(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<PublishPayload>) -> impl IntoResponse {
+    // authenticate: a valid, unexpired capability token must be presented
+    let token = match bearer_token(&headers) {
+        Some(t) => t,
+        None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "authentication required: send a Bearer capability token"}))).into_response(),
+    };
+    let claims = match verify_token(&state.secret, &token) {
+        Some(c) => c,
+        None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid or expired token"}))).into_response(),
+    };
+    // authorize: the token must carry the publish scope for its owner
+    if claims.scope != format!("publish:{}", claims.sub) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "token does not grant publish scope"}))).into_response();
+    }
+    // validate grammar first (malformed names are always rejected as 400, regardless of token)
+    let raw_name = match payload.manifest["name"].as_str() {
+        Some(n) => n,
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "manifest.name required"}))).into_response(),
+    };
+    let canonical = match canonical_id(raw_name) {
+        Ok(c) => c,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    // per-owner publish scope: only the owning identity may publish under owner/*
+    let pkg_owner = canonical.split('/').next().unwrap_or("");
+    if pkg_owner != claims.sub {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": format!("owner '{}' cannot publish under '{pkg_owner}/*'", claims.sub)}))).into_response();
+    }
     let mut db = state.db.lock().unwrap();
     match publish_db(&mut db, &payload) {
         Ok(201) => (StatusCode::CREATED, Json(serde_json::json!({"status": "published"}))).into_response(),
@@ -368,6 +518,7 @@ fn build_app(state: AppState) -> Router {
         .route("/api/search", get(search))
         .route("/api/packages/{owner}/{name}", get(pkg_detail))
         .route("/api/packages/{owner}/{name}/{version}/files", get(pkg_files))
+        .route("/api/owners/register", post(register_owner))
         .route("/api/publish", post(publish))
         .with_state(state)
 }
@@ -383,7 +534,11 @@ async fn main() -> anyhow::Result<()> {
     }
     let conn = Connection::open(&db_path)?;
     init(&conn)?;
-    let state = AppState { db: Arc::new(Mutex::new(conn)) };
+    // capability-token signing secret: from env, else a random in-process secret (dev).
+    let secret = std::env::var("SKILLHUB_REGISTRY_SECRET")
+        .map(|s| s.into_bytes())
+        .unwrap_or_else(|_| random_hex().into_bytes());
+    let state = AppState { db: Arc::new(Mutex::new(conn)), secret };
 
     let app = build_app(state);
 
@@ -507,10 +662,14 @@ mod tests {
 
     // ---- HTTP integration: prove canonical_id() is the single path for lookups + publishes ----
 
+    fn test_secret() -> Vec<u8> {
+        b"test-registry-secret-for-unit-tests-0123456789".to_vec()
+    }
+
     fn test_state() -> AppState {
         let conn = Connection::open_in_memory().unwrap();
         init(&conn).unwrap();
-        AppState { db: Arc::new(Mutex::new(conn)) }
+        AppState { db: Arc::new(Mutex::new(conn)), secret: test_secret() }
     }
 
     fn publish_body() -> String {
@@ -536,19 +695,12 @@ mod tests {
         (status, String::from_utf8_lossy(&body).to_string())
     }
 
-    async fn post_json(app: &Router, uri: &str, body: &str) -> (StatusCode, String) {
-        let resp = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(uri)
-                    .header("content-type", "application/json")
-                    .body(Body::from(body.to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+    async fn post_json(app: &Router, uri: &str, body: &str, token: Option<&str>) -> (StatusCode, String) {
+        let mut b = Request::builder().method("POST").uri(uri).header("content-type", "application/json");
+        if let Some(t) = token {
+            b = b.header("authorization", format!("Bearer {t}"));
+        }
+        let resp = app.clone().oneshot(b.body(Body::from(body.to_string())).unwrap()).await.unwrap();
         let status = resp.status();
         let body = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
         (status, String::from_utf8_lossy(&body).to_string())
@@ -557,10 +709,11 @@ mod tests {
     #[tokio::test]
     async fn http_publish_then_reads_via_canonical_id() {
         let app = build_app(test_state());
-        // publish valid owner/name -> 201
-        let (s, _) = post_json(&app, "/api/publish", &publish_body()).await;
+        let token = mint_token(&test_secret(), "demo", "publish:demo");
+        // publish valid owner/name with the owner's token -> 201
+        let (s, _) = post_json(&app, "/api/publish", &publish_body(), Some(&token)).await;
         assert_eq!(s, StatusCode::CREATED);
-        // read back via the URL owner/name key-space -> 200 (same canonical id)
+        // read back via the URL owner/name key-space -> 200 (reads stay anonymous, same canonical id)
         let (s, body) = get(&app, "/api/packages/demo/acme-skill").await;
         assert_eq!(s, StatusCode::OK);
         assert!(body.contains("acme-skill"));
@@ -570,8 +723,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn http_publish_requires_auth() {
+        let app = build_app(test_state());
+        // no token -> 401 (unauthenticated publish rejected)
+        let (s, _) = post_json(&app, "/api/publish", &publish_body(), None).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+        // garbage token -> 401
+        let (s, _) = post_json(&app, "/api/publish", &publish_body(), Some("not-a-real-token")).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+        // token signed with a different secret -> 401
+        let forged = mint_token(b"different-secret", "demo", "publish:demo");
+        let (s, _) = post_json(&app, "/api/publish", &publish_body(), Some(&forged)).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn http_publish_forbidden_for_other_owner() {
+        let app = build_app(test_state());
+        // a valid token for owner 'attacker' cannot publish under demo/* -> 403
+        let token = mint_token(&test_secret(), "attacker", "publish:attacker");
+        let (s, body) = post_json(&app, "/api/publish", &publish_body(), Some(&token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
+        assert!(body.contains("cannot publish"));
+        // nothing was written
+        let (s, _) = get(&app, "/api/packages/demo/acme-skill").await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
     async fn http_publish_rejects_non_canonical_grammar() {
         let app = build_app(test_state());
+        let token = mint_token(&test_secret(), "demo", "publish:demo");
         for bad in ["no_slash", "A/b", "a/b/c", "demo/under_score"] {
             let body = serde_json::json!({
                 "manifest": {"name": bad, "version": "1.0.0", "description": "bad",
@@ -580,7 +762,7 @@ mod tests {
                 "scan": {"verified": true}
             })
             .to_string();
-            let (s, _) = post_json(&app, "/api/publish", &body).await;
+            let (s, _) = post_json(&app, "/api/publish", &body, Some(&token)).await;
             assert_eq!(s, StatusCode::BAD_REQUEST, "expected 400 for name '{bad}'");
         }
     }

@@ -60,6 +60,11 @@ enum Command {
     Scan { dir: String },
     /// List detected harnesses on this machine
     Harnesses,
+    /// Register an owner and mint its first publish capability token
+    Register {
+        /// Owner namespace to register (lowercase, matches [a-z0-9][a-z0-9-]*)
+        owner: String,
+    },
     /// Publish a local skill directory to the registry (runs the scanner first)
     Publish {
         /// Path to skillhub.json
@@ -67,6 +72,9 @@ enum Command {
         /// Directory containing the skill files
         #[arg(long)]
         files_dir: String,
+        /// Publish capability token (else $SKILLHUB_TOKEN)
+        #[arg(long)]
+        token: Option<String>,
     },
 }
 
@@ -82,7 +90,8 @@ fn main() -> anyhow::Result<()> {
         Command::Verify { name, dir, quality } => cmd_verify(&client, name.as_deref(), dir.as_deref(), *quality),
         Command::Scan { dir } => cmd_scan(Path::new(dir)),
         Command::Harnesses => cmd_harnesses(),
-        Command::Publish { manifest, files_dir } => cmd_publish(&client, manifest, Path::new(files_dir)),
+        Command::Register { owner } => cmd_register(&client, owner),
+        Command::Publish { manifest, files_dir, token } => cmd_publish(&client, manifest, Path::new(files_dir), token.as_deref()),
     }
 }
 
@@ -368,7 +377,15 @@ fn cmd_harnesses() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_publish(client: &registry::Client, manifest_path: &str, files_dir: &Path) -> anyhow::Result<()> {
+fn cmd_register(client: &registry::Client, owner: &str) -> anyhow::Result<()> {
+    let (registered, token) = client.register_owner(owner)?;
+    println!("owner registered: {registered}");
+    println!("export SKILLHUB_TOKEN={token}");
+    println!("  (keep this capability token secret; it grants publish scope for {registered}/*)");
+    Ok(())
+}
+
+fn cmd_publish(client: &registry::Client, manifest_path: &str, files_dir: &Path, token: Option<&str>) -> anyhow::Result<()> {
     let raw = fs::read_to_string(manifest_path)?;
     let m = manifest::Manifest::from_json(&raw)?;
     anyhow::ensure!(files_dir.is_dir(), "--files-dir must be a directory");
@@ -403,9 +420,13 @@ fn cmd_publish(client: &registry::Client, manifest_path: &str, files_dir: &Path)
         "files": files,
         "scan": serde_json::to_value(&report)?,
     });
-    let status = client.publish(&payload)?;
+    // publish token: --token flag, else $SKILLHUB_TOKEN
+    let token = token.map(|t| t.to_string()).or_else(|| std::env::var("SKILLHUB_TOKEN").ok());
+    let status = client.publish(&payload, token.as_deref())?;
     match status {
         201 => println!("published {} v{} (verified: {})", m.name, m.version, report.verified),
+        401 => println!("ERROR: publish requires a capability token — run `skillhub register {}` or set $SKILLHUB_TOKEN", m.name.split('/').next().unwrap_or("")),
+        403 => println!("ERROR: your token cannot publish under {}/* (per-owner scope)", m.name.split('/').next().unwrap_or("")),
         409 => println!("ERROR: version {} of {} already exists (versions are immutable)", m.version, m.name),
         other => println!("ERROR: registry returned HTTP {}", other),
     }

@@ -809,3 +809,9 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test (exit 0, 9/9 passed — +3 HTTP tests); live curl probe confirmed /api/packages/Bad/name → 400, valid-grammar unknown → 404
 - EXIT CODES: verify 0; cargo test 0
 - Lock verify: PASS
+
+### Task done: Owner namespaces with per-owner publish scope
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (owners table; self-contained HMAC-SHA256 capability tokens [base64url claims + hex sig]; register_owner endpoint mints publish:<owner> token; publish requires Bearer token, validates grammar first, enforces package owner == token owner → 403; AppState.secret from SKILLHUB_REGISTRY_SECRET else random; +4 HTTP tests incl. requires_auth + forbidden_for_other_owner); Cargo.toml (+hmac, sha2, base64, rand); apps/skillhub-cli/src/main.rs (+Register cmd, Publish --token, cmd_register, 401/403 handling); apps/skillhub-cli/src/registry.rs (register_owner, publish w/ Bearer); scripts/demos/skillhub-install-demo.sh (register owner + SKILLHUB_TOKEN)
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 11/11 — +2); cargo build + cargo test CLI (exit 0, 9/9); demo skillhub-install-demo.sh (exit 0, publishes verified demo/hello-skill v1.0.0, installs + verifies)
+- EXIT CODES: verify 0; registry test 0; CLI build 0; CLI test 0; demo 0
+- Lock verify: PASS

@@ -158,7 +158,7 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && (cd apps/skillhub-registry && cargo test) && (cd apps/skillhub-cli && cargo test) && bash scripts/run-all-checks.sh -->
 - [x] **MUST LAND FIRST:** normalize the package identifier model to a canonical `owner/name` used identically by schema and handlers; reset the runtime registry DB (no migration code) per the DECIDED note. The read/write key-space mismatch is unresolved until this lands — every later auth task depends on it.
 - [x] Enforce a package-name grammar and a single `canonical_id()` path for all lookups and publishes.
-- [ ] Introduce owner namespaces with per-owner publish scope (only the owning identity may publish under `owner/*`).
+- [x] Introduce owner namespaces with per-owner publish scope (only the owning identity may publish under `owner/*`).
 - [ ] Add authentication/authorization for publish via self-contained, scoped, revocable capability tokens; keep read anonymous; never log or env-embed secrets.
 - [ ] Add rate limiting (per-IP and per-token token buckets on publish; global read limits) using tower + governor or equivalent.
 - [ ] Harden input validation: semver, manifest JSON-schema, package/file size caps, path-traversal guard on `files` keys, content-type checks, request body cap.

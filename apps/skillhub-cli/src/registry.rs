@@ -66,9 +66,25 @@ impl Client {
         Ok(resp.into_json()?)
     }
 
-    pub fn publish(&self, payload: &serde_json::Value) -> anyhow::Result<u16> {
+    /// Register an owner and mint its first publish capability token.
+    pub fn register_owner(&self, owner: &str) -> anyhow::Result<(String, String)> {
+        let url = format!("{}/api/owners/register", self.base);
+        let body = serde_json::json!({ "owner": owner });
+        let resp = ureq::post(&url).send_json(&body)?;
+        let v: serde_json::Value = resp.into_json()?;
+        let owner_out = v["owner"].as_str().unwrap_or(owner).to_string();
+        let token = v["token"].as_str().ok_or_else(|| anyhow::anyhow!("register did not return a token"))?.to_string();
+        Ok((owner_out, token))
+    }
+
+    /// Publish a package. Requires a capability token for the owning namespace.
+    pub fn publish(&self, payload: &serde_json::Value, token: Option<&str>) -> anyhow::Result<u16> {
         let url = format!("{}/api/publish", self.base);
-        let resp = ureq::post(&url).send_json(payload)?;
+        let mut req = ureq::post(&url);
+        if let Some(t) = token {
+            req = req.set("Authorization", &format!("Bearer {t}"));
+        }
+        let resp = req.send_json(payload)?;
         Ok(resp.status())
     }
 }
