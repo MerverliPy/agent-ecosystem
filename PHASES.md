@@ -154,10 +154,10 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Portrait-size TUI demo GIF (`deskagent-tui-mobile-demo.gif`) + Moshi SSH connection docs in the CLI README.
 - **Exit criteria:** narrow-layout + guard + mobile-key + mouse tests green; wide-layout behavior unchanged; `run-all-checks.sh` stays green.
 
-## Phase 9: SkillHub registry security (public multi-tenant) <!-- PENDING --> <!-- DEPENDS_ON: Phase 3 -->
+## Phase 9: SkillHub registry security (public multi-tenant) <!-- IN_PROGRESS --> <!-- DEPENDS_ON: Phase 3 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && (cd apps/skillhub-registry && cargo test) && (cd apps/skillhub-cli && cargo test) && bash scripts/run-all-checks.sh -->
-- [ ] **MUST LAND FIRST:** normalize the package identifier model to a canonical `owner/name` used identically by schema and handlers; reset the runtime registry DB (no migration code) per the DECIDED note. The read/write key-space mismatch is unresolved until this lands — every later auth task depends on it.
-- [ ] Enforce a package-name grammar and a single `canonical_id()` path for all lookups and publishes.
+- [x] **MUST LAND FIRST:** normalize the package identifier model to a canonical `owner/name` used identically by schema and handlers; reset the runtime registry DB (no migration code) per the DECIDED note. The read/write key-space mismatch is unresolved until this lands — every later auth task depends on it.
+- [x] Enforce a package-name grammar and a single `canonical_id()` path for all lookups and publishes.
 - [ ] Introduce owner namespaces with per-owner publish scope (only the owning identity may publish under `owner/*`).
 - [ ] Add authentication/authorization for publish via self-contained, scoped, revocable capability tokens; keep read anonymous; never log or env-embed secrets.
 - [ ] Add rate limiting (per-IP and per-token token buckets on publish; global read limits) using tower + governor or equivalent.

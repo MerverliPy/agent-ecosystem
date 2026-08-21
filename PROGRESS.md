@@ -775,3 +775,37 @@ satisfaction of the DoD.
     RUN-ALL-CHECKS-OK
 - EXIT CODES: cargo test 0, deskagent chat 0, run-all-checks 0
 - Lock verify: PASS (verify OK before and after; no repo files touched)
+
+---
+
+## Phase 9: SkillHub registry security (public multi-tenant) <!-- IN_PROGRESS -->
+
+**Phase status:** IN_PROGRESS (started 2026-08-21)
+**Checkpoint tag:** `phase-9-start`
+**DECIDED context (planning-milestone-2.md §6):** DB reset accepted (runtime, gitignored, dev-seeded — no real users, no migration code; record migration note only). Capability tokens self-issued/revocable/scoped per owner (DEC-0005 local-first). Single registry CA issuing per-owner keys.
+**Exit criteria:** unauthenticated publish rejected; unauthorized owner publish rejected; malicious fixtures fail validation; verified packages remain anonymously readable; all adversarial + existing tests green.
+
+Mirrored tasks:
+- [ ] **MUST LAND FIRST:** normalize package identifier to canonical `owner/name` used identically by schema + handlers; reset runtime registry DB (no migration code).
+- [ ] Enforce package-name grammar + single `canonical_id()` path for all lookups and publishes.
+- [ ] Owner namespaces with per-owner publish scope.
+- [ ] Capability-token auth for publish (self-contained, scoped, revocable); anonymous reads.
+- [ ] Rate limiting (per-IP/per-token publish buckets; global read limits) via tower + governor or equivalent.
+- [ ] Input hardening: semver, manifest JSON-schema, size caps, path-traversal guard on `files` keys, content-type, body cap.
+- [ ] Publish integrity: signing verified against registry CA per-owner keys; rollover/revocation.
+- [ ] Transport/runtime hardening: TLS guidance, bind-address policy, structured errors (no internal leakage), default-deny.
+- [ ] Abuse/DoS: max DB size, quarantine of unverified/`high_risk` behind opt-in, batch download-count writes.
+- [ ] Artifact hygiene: `*.db`, seed tokens, signing secrets out of git + container images; no build step copies them into artifacts.
+- [ ] Adversarial security test suite (path traversal, oversized, bad semver, unauthorized, signature mismatch) + keep existing registry tests green.
+
+### Task done: Normalize package identity to canonical owner/name (MUST LAND FIRST)
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (canonical_id() + valid_segment(); publish validates manifest.name; pkg_detail/pkg_files validate URL owner/name → 400; header docs + DB-reset note; 2 new tests) +18 lines net; PHASES.md checkbox; PROGRESS.md mirror + template
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test (exit 0, 6/6 passed — was 4, +2)
+- EXIT CODES: verify 0; cargo test 0
+- Lock verify: PASS
+
+### Task done: Enforce package-name grammar + single canonical_id() path
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (extracted build_app(); added tower/http-body-util dev-deps in Cargo.toml; 3 HTTP integration tests proving canonical_id is the single path for publish + reads; invalid grammar → 400 at HTTP layer); PHASES.md checkbox
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test (exit 0, 9/9 passed — +3 HTTP tests); live curl probe confirmed /api/packages/Bad/name → 400, valid-grammar unknown → 404
+- EXIT CODES: verify 0; cargo test 0
+- Lock verify: PASS

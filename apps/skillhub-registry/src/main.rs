@@ -2,9 +2,18 @@
 // Endpoints:
 //   GET  /health
 //   GET  /api/search?q=<text>                          -> Vec<Summary>
-//   GET  /api/packages/{name}                          -> Detail (latest verified flags + versions)
-//   GET  /api/packages/{name}/{version}/files          -> {files: {path: content}} (increments download count)
+//   GET  /api/packages/{owner}/{name}                  -> Detail (latest verified flags + versions)
+//   GET  /api/packages/{owner}/{name}/{version}/files  -> {files: {path: content}} (increments download count)
 //   POST /api/publish                                  -> 201 | 409 | 400
+//
+// Canonical identity model: a package's canonical id is the string `owner/name` where each segment
+// matches `[a-z0-9][a-z0-9-]*` (same grammar as the skill-manifest schema). Every handler resolves
+// ids through `canonical_id()` so the write key-space (manifest.name) and the read key-space
+// (URL owner/name) are guaranteed to coincide.
+//
+// DB reset (DECIDED 2026-08-15, planning-milestone-2.md §6.1): the registry DB is a runtime,
+// gitignored, developer-seeded artifact with no real users. This build resets it under the
+// canonical `owner/name` model. No migration code ships — `init()` creates the schema fresh.
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -22,6 +31,32 @@ type Db = Arc<Mutex<Connection>>;
 #[derive(Clone)]
 struct AppState {
     db: Db,
+}
+
+/// Validate a single `owner` or `name` segment against the canonical grammar
+/// `[a-z0-9][a-z0-9-]*` (lowercase alphanumeric, then alphanumeric or hyphen).
+fn valid_segment(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_lowercase() || c.is_ascii_digit() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// Canonical package identifier: validate and normalize `owner/name`.
+/// This is the single path every registry lookup and publish resolves an id through,
+/// so the write key-space (manifest.name) and read key-space (URL owner/name) always agree.
+fn canonical_id(id: &str) -> Result<String, String> {
+    let mut it = id.split('/');
+    let owner = it.next().unwrap_or("");
+    let name = it.next().unwrap_or("");
+    if it.next().is_some() || !valid_segment(owner) || !valid_segment(name) {
+        return Err(format!(
+            "invalid package id '{id}' — expected owner/name of [a-z0-9][a-z0-9-]* segments"
+        ));
+    }
+    Ok(format!("{owner}/{name}"))
 }
 
 // ---------- schema + db layer ----------
@@ -206,7 +241,10 @@ async fn search(State(state): State<AppState>, Query(q): Query<SearchQuery>) -> 
 }
 
 async fn pkg_detail(State(state): State<AppState>, Path((owner, name)): Path<(String, String)>) -> impl IntoResponse {
-    let full = format!("{owner}/{name}");
+    let full = match canonical_id(&format!("{owner}/{name}")) {
+        Ok(f) => f,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
     let db = state.db.lock().unwrap();
     match detail_db(&db, &full) {
         Ok(Some(d)) => (StatusCode::OK, Json(d)).into_response(),
@@ -216,7 +254,10 @@ async fn pkg_detail(State(state): State<AppState>, Path((owner, name)): Path<(St
 }
 
 async fn pkg_files(State(state): State<AppState>, Path((owner, name, version)): Path<(String, String, String)>) -> impl IntoResponse {
-    let full = format!("{owner}/{name}");
+    let full = match canonical_id(&format!("{owner}/{name}")) {
+        Ok(f) => f,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
     let db = state.db.lock().unwrap();
     match files_db(&db, &full, &version) {
         Ok(Some(files)) => {
@@ -237,7 +278,11 @@ struct PublishPayload {
 
 fn publish_db(conn: &mut Connection, p: &PublishPayload) -> anyhow::Result<u16> {
     let m = &p.manifest;
-    let name = m["name"].as_str().ok_or_else(|| anyhow::anyhow!("manifest.name required"))?.to_string();
+    let raw_name = m["name"].as_str().ok_or_else(|| anyhow::anyhow!("manifest.name required"))?;
+    let name = match canonical_id(raw_name) {
+        Ok(n) => n,
+        Err(_) => return Ok(400), // invalid owner/name grammar — write key-space must match read key-space
+    };
     let version = m["version"].as_str().ok_or_else(|| anyhow::anyhow!("manifest.version required"))?.to_string();
     let description = m["description"].as_str().unwrap_or("").to_string();
     let license = m["license"].as_str().unwrap_or("").to_string();
@@ -309,13 +354,23 @@ async fn publish(State(state): State<AppState>, Json(payload): Json<PublishPaylo
     match publish_db(&mut db, &payload) {
         Ok(201) => (StatusCode::CREATED, Json(serde_json::json!({"status": "published"}))).into_response(),
         Ok(409) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": "version already exists (immutable)"}))).into_response(),
-        Ok(400) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid manifest: name/version/description required"}))).into_response(),
+        Ok(400) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid manifest: name (owner/name grammar), version, description required"}))).into_response(),
         Ok(other) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("unexpected status {other}")}))).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     }
 }
 
 // ---------- main ----------
+
+fn build_app(state: AppState) -> Router {
+    Router::new()
+        .route("/health", get(health))
+        .route("/api/search", get(search))
+        .route("/api/packages/{owner}/{name}", get(pkg_detail))
+        .route("/api/packages/{owner}/{name}/{version}/files", get(pkg_files))
+        .route("/api/publish", post(publish))
+        .with_state(state)
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -330,13 +385,7 @@ async fn main() -> anyhow::Result<()> {
     init(&conn)?;
     let state = AppState { db: Arc::new(Mutex::new(conn)) };
 
-    let app = Router::new()
-        .route("/health", get(health))
-        .route("/api/search", get(search))
-        .route("/api/packages/{owner}/{name}", get(pkg_detail))
-        .route("/api/packages/{owner}/{name}/{version}/files", get(pkg_files))
-        .route("/api/publish", post(publish))
-        .with_state(state);
+    let app = build_app(state);
 
     let addr = format!("127.0.0.1:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -369,6 +418,9 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
 
     fn mem_conn() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -386,6 +438,31 @@ mod tests {
             files: files.iter().map(|(p, c)| (p.to_string(), c.to_string())).collect(),
             scan: serde_json::json!({"verified": verified, "findings": []}),
         }
+    }
+
+    #[test]
+    fn canonical_id_valid_and_normalized() {
+        assert_eq!(canonical_id("demo/a").unwrap(), "demo/a");
+        assert_eq!(canonical_id("org-1/skill-2").unwrap(), "org-1/skill-2");
+        assert!(canonical_id("demo").is_err()); // no slash
+        assert!(canonical_id("demo/a/b").is_err()); // too many segments
+        assert!(canonical_id("/a").is_err()); // empty owner
+        assert!(canonical_id("demo/").is_err()); // empty name
+        assert!(canonical_id("Demo/a").is_err()); // uppercase
+        assert!(canonical_id("demo/a_b").is_err()); // underscore
+        assert!(canonical_id("-demo/a").is_err()); // hyphen first char
+    }
+
+    #[test]
+    fn publish_rejects_invalid_name() {
+        let mut conn = mem_conn();
+        // malformed ids rejected before any row is written (write key-space == read key-space)
+        assert_eq!(publish_db(&mut conn, &payload("no_slash", "1.0.0", &[], true)).unwrap(), 400);
+        assert_eq!(publish_db(&mut conn, &payload("A/b", "1.0.0", &[], true)).unwrap(), 400);
+        assert_eq!(publish_db(&mut conn, &payload("a/b/c", "1.0.0", &[], true)).unwrap(), 400);
+        assert_eq!(publish_db(&mut conn, &payload("demo/under_score", "1.0.0", &[], true)).unwrap(), 400);
+        assert!(search_db(&conn, "a").unwrap().is_empty());
+        assert!(detail_db(&conn, "demo/under_score").unwrap().is_none());
     }
 
     #[test]
@@ -426,5 +503,97 @@ mod tests {
         let conn = mem_conn();
         assert!(detail_db(&conn, "nope/x").unwrap().is_none());
         assert!(files_db(&conn, "nope/x", "1.0.0").unwrap().is_none());
+    }
+
+    // ---- HTTP integration: prove canonical_id() is the single path for lookups + publishes ----
+
+    fn test_state() -> AppState {
+        let conn = Connection::open_in_memory().unwrap();
+        init(&conn).unwrap();
+        AppState { db: Arc::new(Mutex::new(conn)) }
+    }
+
+    fn publish_body() -> String {
+        serde_json::json!({
+            "manifest": {
+                "name": "demo/acme-skill", "version": "1.0.0", "description": "http test skill",
+                "license": "MIT", "repo": "https://example.com/repo", "harnesses": ["pi"]
+            },
+            "files": { "SKILL.md": "# http" },
+            "scan": { "verified": true, "findings": [] }
+        })
+        .to_string()
+    }
+
+    async fn get(app: &Router, uri: &str) -> (StatusCode, String) {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let status = resp.status();
+        let body = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+        (status, String::from_utf8_lossy(&body).to_string())
+    }
+
+    async fn post_json(app: &Router, uri: &str, body: &str) -> (StatusCode, String) {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = resp.status();
+        let body = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+        (status, String::from_utf8_lossy(&body).to_string())
+    }
+
+    #[tokio::test]
+    async fn http_publish_then_reads_via_canonical_id() {
+        let app = build_app(test_state());
+        // publish valid owner/name -> 201
+        let (s, _) = post_json(&app, "/api/publish", &publish_body()).await;
+        assert_eq!(s, StatusCode::CREATED);
+        // read back via the URL owner/name key-space -> 200 (same canonical id)
+        let (s, body) = get(&app, "/api/packages/demo/acme-skill").await;
+        assert_eq!(s, StatusCode::OK);
+        assert!(body.contains("acme-skill"));
+        let (s, body) = get(&app, "/api/packages/demo/acme-skill/1.0.0/files").await;
+        assert_eq!(s, StatusCode::OK);
+        assert!(body.contains("# http"));
+    }
+
+    #[tokio::test]
+    async fn http_publish_rejects_non_canonical_grammar() {
+        let app = build_app(test_state());
+        for bad in ["no_slash", "A/b", "a/b/c", "demo/under_score"] {
+            let body = serde_json::json!({
+                "manifest": {"name": bad, "version": "1.0.0", "description": "bad",
+                             "license": "MIT", "repo": "x", "harnesses": ["pi"]},
+                "files": {},
+                "scan": {"verified": true}
+            })
+            .to_string();
+            let (s, _) = post_json(&app, "/api/publish", &body).await;
+            assert_eq!(s, StatusCode::BAD_REQUEST, "expected 400 for name '{bad}'");
+        }
+    }
+
+    #[tokio::test]
+    async fn http_reads_reject_non_canonical_url() {
+        let app = build_app(test_state());
+        let (s, _) = get(&app, "/api/packages/Bad/name").await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+        let (s, _) = get(&app, "/api/packages/Bad/name/1.0.0/files").await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+        // valid grammar but unknown package -> 404, not 400
+        let (s, _) = get(&app, "/api/packages/valid/unknown").await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
     }
 }
