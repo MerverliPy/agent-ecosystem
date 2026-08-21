@@ -947,3 +947,9 @@ Mirrored tasks:
 - Exit criteria met: release pipeline configured (tag → build → sign → publish, linux+macOS matrix); `release-gate.sh` passes locally on real built artifacts; secured registry deployable from its container (validated build+run); no runtime DB / seed token / signing secret baked into any artifact; DeskAgent GUI remains excluded/deferred.
 - Handoff: `records/final-handoff.md` — MILESTONE ACCEPTANCE CLAIMED: YES (conditional on external tag-push/CI publish).
 - Next action (human): push tag `v0.1.0` to trigger `.github/workflows/release.yml`; optionally `npm publish` from `apps/slopgate`.
+
+## Council audit — v0.1.0 release readiness (2026-08-21)
+- Ran council-mode (architect/operator/skeptic, Pass 1). **Verdict: NOT READY to push v0.1.0 as configured.** No plan files changed; the blockers are in the release-pipeline implementation.
+- Verified blockers: (1) no `npm ci` before run-all-checks; (2) release.yml never calls gen-sbom.sh but release-gate requires SBOM.json; (3) bare-name artifact matrix collision vs install.sh `${CLI}-${TARGET}`; (4) linux CI fails at Tauri shell cargo check (webkit/gtk deps); (5) no LICENSE / missing license metadata (DEC-0002); (6) signing unwired; (7) container/web/action/installers never published; (8) npm step dead-gated; (9) install.sh REPO default invalid; plus smaller items.
+- Memo: `records/council-memo-v010-release.md`. Owner decisions required: v0.1.0 scope (CLI-only vs full), signed/unsigned, npm include, license, and whether to fix in-repo + clean-CI dry-run first.
+- Recommendation: do NOT push `v0.1.0` until blockers fixed and a clean CI dry run passes.
