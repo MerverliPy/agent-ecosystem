@@ -953,3 +953,9 @@ Mirrored tasks:
 - Verified blockers: (1) no `npm ci` before run-all-checks; (2) release.yml never calls gen-sbom.sh but release-gate requires SBOM.json; (3) bare-name artifact matrix collision vs install.sh `${CLI}-${TARGET}`; (4) linux CI fails at Tauri shell cargo check (webkit/gtk deps); (5) no LICENSE / missing license metadata (DEC-0002); (6) signing unwired; (7) container/web/action/installers never published; (8) npm step dead-gated; (9) install.sh REPO default invalid; plus smaller items.
 - Memo: `records/council-memo-v010-release.md`. Owner decisions required: v0.1.0 scope (CLI-only vs full), signed/unsigned, npm include, license, and whether to fix in-repo + clean-CI dry-run first.
 - Recommendation: do NOT push `v0.1.0` until blockers fixed and a clean CI dry run passes.
+
+## Release readiness — 3 issues fixed (2026-08-21)
+1. **Secrets**: `gh secret set` RELEASE_GPG_KEY + GPG_KEY_ID (GPG-signed artifacts, validated). NPM_TOKEN pending owner's npm credentials (cannot be minted here).
+2. **cargo-dist**: init run in both Rust workspaces (`repository`, `[profile.dist]`, `allow-dirty=["ci"]`); installers (install.sh/homebrew/tar.xz) build for linux amd64 in the publish job.
+3. **Clean CI dry run**: `workflow_dispatch` on main — **all 6 jobs SUCCESS** (checks, 4 target builds, publish incl. GPG-signed release-gate + GHCR push). npm publish and GitHub-Release steps correctly skipped on branch runs (run on the v0.1.0 tag).
+- Memo updated: `records/council-memo-v010-release.md`.

@@ -76,3 +76,17 @@ All in-repo blockers fixed and committed (main `f79f10a`):
 - Run a **clean GitHub CI dry run** on the corrected pipeline before pushing the `v0.1.0` tag.
 
 The release-gate was validated locally against the full inventory (8 per-target binaries + web + action + SBOM + checksums → RELEASE-GATE-OK). Docker build validated with root context + `.dockerignore`. Tag push is still deferred pending a clean CI dry run.
+
+## CI dry-run result (2026-08-21)
+
+Ran the corrected pipeline via `workflow_dispatch` on `main` (run 32464668333): **SUCCESS**.
+- checks : success (npm ci + run-all-checks 21/21)
+- build x86_64-apple-darwin / x86_64-unknown-linux-gnu / aarch64-unknown-linux-gnu / aarch64-apple-darwin : success
+- publish : success (assemble + cargo-dist installers + GPG signing + SBOM + release-gate ALL green; registry container pushed to GHCR `ghcr.io/merverlipy/agent-ecosystem/skillhub-registry`)
+- npm publish : skipped (no NPM_TOKEN secret yet)
+- GitHub Release upload : skipped (branch run; runs on `v0.1.0` tag)
+
+Secrets set via `gh secret set`: `RELEASE_GPG_KEY`, `GPG_KEY_ID`. `NPM_TOKEN` still requires the owner's npm credentials.
+cargo-dist: `init` run in both workspaces; installers (install.sh + Homebrew + tar.xz + checksums) build for linux amd64 in the publish job (`allow-dirty=["ci"]` lets dist build without owning the workflow).
+
+The pipeline is now proven end-to-end in clean CI. Remaining to ship: (a) set `NPM_TOKEN` for `npm publish`; (b) push the `v0.1.0` tag (now creates the GitHub Release).
