@@ -57,12 +57,17 @@ else
   FAILURES=$((FAILURES+1))
 fi
 
-# signature: if a detached signature is present, verify it when gpg + the public key are available
+# signature: if a detached signature is present, import the committed project public key and verify it
 if [ -f "$DIR/SHA256SUMS.sig" ]; then
-  if command -v gpg >/dev/null 2>&1 && gpg --verify "$DIR/SHA256SUMS.sig" "$DIR/SHA256SUMS" >/dev/null 2>&1; then
+  # make the public key available for verification (self-contained; the private key is a CI secret)
+  if command -v gpg >/dev/null 2>&1 && [ -f "$ROOT/scripts/release-gpg-public.asc" ]; then
+    gpg --batch --import "$ROOT/scripts/release-gpg-public.asc" >/dev/null 2>&1
+  fi
+  if command -v gpg >/dev/null 2>&1 && gpg --batch --verify "$DIR/SHA256SUMS.sig" "$DIR/SHA256SUMS" >/dev/null 2>&1; then
     echo "  ok   SHA256SUMS.sig verifies"
   else
-    echo "  WARN SHA256SUMS.sig present but not verified (no public key configured) — signature NOT confirmed"
+    echo "  FAIL SHA256SUMS.sig does not verify against the project public key"
+    FAILURES=$((FAILURES+1))
   fi
 else
   echo "  note no SHA256SUMS.sig (unsigned release)"

@@ -13,7 +13,7 @@ find . -maxdepth 1 -type f ! -name SHA256SUMS ! -name '*.sig' ! -name 'SBOM.json
 echo "wrote $DIR/SHA256SUMS"
 
 if command -v gpg >/dev/null 2>&1 && [ -n "${GPG_KEY_ID:-}" ]; then
-  gpg --batch --yes --armor --detach-sign --local-user "$GPG_KEY_ID" SHA256SUMS
+  gpg --batch --yes --armor --detach-sign --output SHA256SUMS.sig --local-user "$GPG_KEY_ID" SHA256SUMS
   echo "wrote $DIR/SHA256SUMS.sig (GPG key ${GPG_KEY_ID})"
 else
   echo "no GPG key configured (GPG_KEY_ID) — SHA256SUMS written unsigned"
