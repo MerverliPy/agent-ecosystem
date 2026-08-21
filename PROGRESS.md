@@ -889,3 +889,10 @@ Mirrored tasks:
 - [ ] Publish `slopgate` as an npm package/tarball and `slopgate-action` as a versioned GitHub Action.
 - [ ] Add release-artifact signing and provenance (checksums, signing keys, SBOM); defer code-signing policy to the GUI milestone but plan key rotation.
 - [ ] Add a separate `scripts/release-gate.sh` (artifact presence, checksum verification, version consistency) wired into the CI tag pipeline; add version/self-update or binstall upgrade paths for CLI products.
+
+### Task done: Unified versioning (single semver source, CHANGELOG, tag mapping)
+- FILES CHANGED: VERSION (new, `0.1.0`); scripts/check-versions.sh (new — asserts all 10 product manifests + root match VERSION); CHANGELOG.md (new — v0.1.0 per-product + git tag `v<version>` convention); PHASES.md checkbox
+- VALIDATIONS RUN: plan-lock verify (exit 0); bash scripts/check-versions.sh (exit 0, VERSION-CHECK-OK, all 11 ok)
+- EXIT CODES: verify 0; check-versions 0
+- Lock verify: PASS
+- NOTE: all products already at 0.1.0; deskagent uses `[workspace.package]` single source. check-versions.sh is called by release-gate.sh (Phase 10 Task 8), not run-all-checks.
