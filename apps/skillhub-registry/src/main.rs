@@ -1534,6 +1534,85 @@ mod tests {
         assert!(d.downloads == 3);
     }
 
+    // ---- adversarial security suite: consolidated attack matrix ----
+
+    #[tokio::test]
+    async fn adversarial_publish_attack_matrix() {
+        let state = test_state();
+        let key = register_key(&state, "demo");
+        let attacker = register_key(&state, "attacker");
+        let app = build_app(state);
+        let token = mint_token(&test_secret(), "demo", "publish:demo").0;
+        let good = base_manifest();
+        let good_files = HashMap::from([("SKILL.md".to_string(), "# ok".to_string())]);
+
+        // happy path first
+        let body = signed_body(&key, &good, &good_files);
+        let (s, _) = post_json(&app, "/api/publish", &body, Some(&token)).await;
+        assert_eq!(s, StatusCode::CREATED);
+
+        // 1. unauthenticated
+        let (s, _) = post_json(&app, "/api/publish", &body, None).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED, "unauthenticated publish");
+        // 2. token for a different owner
+        let other_token = mint_token(&test_secret(), "attacker", "publish:attacker").0;
+        let (s, _) = post_json(&app, "/api/publish", &body, Some(&other_token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "unauthorized owner publish");
+        // 3. valid token but attacker's signing key
+        let body_att = signed_body(&attacker, &good, &good_files);
+        let (s, _) = post_json(&app, "/api/publish", &body_att, Some(&token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "signature mismatch (attacker key)");
+        // 4. missing signature
+        let no_sig = serde_json::json!({"manifest": good, "files": good_files, "scan": {"verified": true}}).to_string();
+        let (s, _) = post_json(&app, "/api/publish", &no_sig, Some(&token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "missing signature");
+        // 5. tampered signature (flip a byte)
+        let orig_sig = sign_package(&key, &good, &HashMap::from([("SKILL.md".to_string(), "# ok".to_string())]));
+        let mut raw = b64url_decode(&orig_sig).unwrap();
+        raw[0] ^= 0xff; // corrupt the signature bytes
+        let tampered_sig = b64url(&raw);
+        let tampered = serde_json::json!({"manifest": good, "files": {"SKILL.md": "# ok"},
+            "scan": {"verified": true}, "signature": tampered_sig}).to_string();
+        let (s, _) = post_json(&app, "/api/publish", &tampered, Some(&token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "tampered signature");
+        // 6. bad semver
+        let mut m6 = base_manifest();
+        m6["version"] = serde_json::json!("1.0");
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key, &m6, &good_files), Some(&token)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "bad semver");
+        // 7. path traversal file
+        let mut f7 = good_files.clone();
+        f7.insert("../evil.sh".to_string(), "#!/bin/sh".to_string());
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key, &base_manifest(), &f7), Some(&token)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "path traversal");
+        // 8. oversized file
+        let mut f8 = good_files.clone();
+        f8.insert("big.md".to_string(), "x".repeat(MAX_FILE_SIZE + 1));
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key, &base_manifest(), &f8), Some(&token)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "oversized file");
+        // 9. extra manifest field (additionalProperties: false)
+        let mut m9 = base_manifest();
+        m9["author"] = serde_json::json!("x");
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key, &m9, &good_files), Some(&token)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "extra manifest field");
+        // 10. wrong content-type
+        let resp = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/publish")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "text/plain")
+                .body(Body::from("x")).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE, "wrong content-type");
+        // 11. invalid name grammar
+        let mut m11 = base_manifest();
+        m11["name"] = serde_json::json!("nope");
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key, &m11, &good_files), Some(&token)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "invalid name grammar");
+        // legitimate package still readable (existing tests unaffected)
+        let (s, _) = get(&app, "/api/packages/demo/skill").await;
+        assert_eq!(s, StatusCode::OK);
+    }
+
     #[tokio::test]
     async fn http_default_deny_unknown_routes() {
         let app = build_app(test_state());

@@ -858,3 +858,9 @@ Mirrored tasks:
 - EXIT CODES: verify 0; hygiene 0; run-all-checks 0
 - Lock verify: PASS
 - NOTE: AGENTS.md still says "20 checks" — updating it needs human review per the source-of-truth hierarchy (agents must not edit AGENTS.md); flag for human approval. Historical "20/20" refs in records/ are left as history.
+
+### Task done: Adversarial security test suite
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (+adversarial_publish_attack_matrix consolidated 11-vector suite: unauthenticated, wrong-owner token, attacker-key signature, missing signature, tampered signature, bad semver, path traversal, oversized file, extra manifest field, wrong content-type, invalid name grammar — asserts each rejected with correct code + legitimate package still readable); PHASES.md checkbox
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 28/28 — +1); cargo test CLI (exit 0, 9/9); run-all-checks.sh (exit 0, 21/21, RUN-ALL-CHECKS-OK)
+- EXIT CODES: verify 0; registry test 0; CLI test 0; run-all-checks 0
+- Lock verify: PASS
