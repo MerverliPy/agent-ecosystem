@@ -959,3 +959,7 @@ Mirrored tasks:
 2. **cargo-dist**: init run in both Rust workspaces (`repository`, `[profile.dist]`, `allow-dirty=["ci"]`); installers (install.sh/homebrew/tar.xz) build for linux amd64 in the publish job.
 3. **Clean CI dry run**: `workflow_dispatch` on main — **all 6 jobs SUCCESS** (checks, 4 target builds, publish incl. GPG-signed release-gate + GHCR push). npm publish and GitHub-Release steps correctly skipped on branch runs (run on the v0.1.0 tag).
 - Memo updated: `records/council-memo-v010-release.md`.
+
+## Release follow-up — .deb/.rpm done; npm blocked by 2FA (2026-08-21)
+- **Native .deb/.rpm installers**: added `scripts/build-native-installers.sh` (dpkg-deb + rpmbuild from linux-amd64 binaries) wired into the publish job (installs `rpm`). Validated locally (.deb builds + structure verified) and in CI (run 32468476981 "build native installers (.deb/.rpm)" success). They ship in the next tag release.
+- **npm publish**: `NPM_TOKEN` set, token authenticates, but the npm account requires a **2FA one-time password** to publish (`EOTP`). The provided token is not an npm "Automation" token, so it cannot bypass 2FA in CI. Blocked until the owner provides an npm **Automation** token (or a live OTP).
