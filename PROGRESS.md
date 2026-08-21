@@ -968,3 +968,37 @@ Mirrored tasks:
 - Scoped package **`@merverli/slopgate@0.1.0`** is public on npm (MIT, bin `slop`). Unscoped `slopgate` is rejected by npm as too similar to existing `slop-gate`, so the scoped name is used.
 - Automation token set as `NPM_TOKEN`; the publish step is tolerant of an existing version and forces public access. Run 32493046752 success.
 - .deb/.rpm native installers also validated in CI (shipping with the next tag release).
+
+---
+
+### Task done: Create missing `/agent-map` prompt template from user-supplied agent map & Brief contract
+- FILES CHANGED: `.pi/prompts/agent-map.md` (new, +79 lines / +3168 bytes; gitignored under `.pi/`, local-only — no commit)
+- VALIDATIONS RUN: `bash scripts/plan-lock.sh verify` (before: exit 0, baseline `4f86e58bdb96`; after: exit 0)
+- EXIT CODES: plan-lock verify before=0, after=0; `git check-ignore`=0 (`.pi/` ignores the file)
+- Lock verify: PASS
+- AUDIT (2026-08-21): agent-map roster vs. installed agents. 11/14 resolve (8 project `.pi/subagents`, 3 shared `~/.pi/agent/agents`), all loadable. MISSING: `api-platform-engineer`, `api-tester`, `test-automation-engineer` (not under ~/.pi, ~/.agents, ~/.claude/agents). Map rule says: name absent → say so, don't approximate. Creation pending human decision.
+
+### Task done: Fix remaining release blocker — .rpm native installers (validate + fix arch bug)
+- FILES CHANGED:
+  - `scripts/build-native-installers.sh` (+9/−5) — decoupled `RPM_ARCH="x86_64"` from Debian
+    `ARCH="amd64"`; spec `BuildArch` now `$RPM_ARCH`; rpm output path `RPMS/$RPM_ARCH/<pkg>-<VER>-1.<RPM_ARCH>.rpm`;
+    rpmbuild stderr surfaced on failure (was `/dev/null`ed → masked the defect).
+  - `records/release-summary.md` (+6/−3) — Deferred/.rpm note updated: VALIDATED, root cause,
+    fix, verification cited.
+  - `PROGRESS.md` (+this template).
+- VALIDATIONS RUN:
+  - `bash scripts/plan-lock.sh verify` (before: exit 0, baseline `4f86e58bdb96`; after: exit 0)
+  - `bash scripts/verify-env.sh` (ENV-OK)
+  - `sudo apt-get install -y rpm` (rpmbuild 4.18.2 installed for validation)
+  - `bash scripts/build-native-installers.sh dist/release` — exit 0; builds
+    `skillhub_0.1.1_amd64.deb`, `deskagent_0.1.1_amd64.deb`,
+    `skillhub-0.1.1-1.x86_64.rpm`, `deskagent-0.1.1-1.x86_64.rpm`
+  - `rpm -qpl`/`rpm -qp` on both .rpm — payload `/usr/bin/<name>`, arch=x86_64, license=MIT
+  - `bash scripts/run-all-checks.sh` — exit 0, 21/21 RUN-ALL-CHECKS-OK
+- EXIT CODES: plan-lock verify before=0/after=0; apt=0; build-native-installers=0; run-all-checks=0
+- Lock verify: PASS
+- ROOT CAUSE FOUND: committed .rpm "fix" was never validated — spec had `BuildArch: amd64`,
+  but `amd64` is not a registered RPM arch → rpmbuild 4.18 aborts "No compatible architectures
+  found for build", silently swallowed by `>/dev/null 2>&1`.
+- NEXT (human): include `.rpm` in a future `v0.1.2` release; CI publish job installs `rpm` and
+  already calls `build-native-installers.sh`, so it now produces both .deb and .rpm.

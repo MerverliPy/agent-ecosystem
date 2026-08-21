@@ -43,9 +43,13 @@ git tag -a v0.1.2 -m "..." && git push origin v0.1.2
 
 ## Deferred / known follow-ups
 
-- **`.rpm` installers** — fix committed (`scripts/build-native-installers.sh`, `%{name}` macro +
-  Source staging) but not yet validated; `.deb` already covers Linux. Run a `v0.1.2` tag to validate
-  **only** if RHEL/Fedora packages are actually needed. The step is best-effort and never fails a release.
+- **`.rpm` installers** — **VALIDATED 2026-08-21.** Found + fixed a real bug the earlier "fix"
+  masked: `BuildArch: amd64` is not a registered RPM arch → `rpmbuild` fails with
+  "No compatible architectures found for build" (silently, stdout/stderr were `/dev/null`-ed).
+  Fixed to `BuildArch: x86_64` with a dedicated `RPM_ARCH` var (Debian `amd64` ≠ RPM arch
+  namespace) and now surface `rpmbuild` stderr on failure instead of a bare warn.
+  `skillhub/deskagent-0.1.1-1.x86_64.rpm` build + payload (`/usr/bin/<name>`) verified locally
+  with `rpmbuild 4.18.2`. Ships with a future `v0.1.2` tag; `.deb` already covers Linux.
 - **macOS installers via cargo-dist** — produced on macOS runners in a future tag run if wanted
   (cargo-dist currently builds linux-amd64 installers on the publish host).
 

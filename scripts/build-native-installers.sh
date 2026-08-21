@@ -9,7 +9,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 DIR="${1:-dist/release}"
 VER="${2:-$(tr -d '[:space:]' < VERSION)}"
-ARCH="amd64"
+ARCH="amd64"          # Debian architecture
+RPM_ARCH="x86_64"      # RPM arch (rpmbuild rejects "amd64" — not a registered RPM arch)
 [ -d "$DIR" ] || { echo "no such dir: $DIR" >&2; exit 1; }
 
 # the linux-amd64 binaries (per-target names from the build matrix)
@@ -56,7 +57,7 @@ Version: ${VER}
 Release: 1
 Summary: $name — an agent-ecosystem command-line tool
 License: MIT
-BuildArch: $ARCH
+BuildArch: $RPM_ARCH
 
 %description
 $name — an agent-ecosystem command-line tool.
@@ -68,8 +69,11 @@ install -m 0755 %{_sourcedir}/$pkg %{buildroot}/usr/bin/%{name}
 %files
 /usr/bin/%{name}
 EOF
-    rpmbuild --define "_topdir $d" -bb "$d/SPECS/$pkg.spec" >/dev/null 2>&1 \
-      && cp "$d/RPMS/$ARCH/${pkg}-${VER}-1.${ARCH}.rpm" "$DIR/" && echo "  built $DIR/${pkg}-${VER}-1.${ARCH}.rpm" || echo "  warn rpmbuild failed for $name"
+    local log; log="$(mktemp)"
+    rpmbuild --define "_topdir $d" -bb "$d/SPECS/$pkg.spec" >"$log" 2>&1 \
+      && cp "$d/RPMS/$RPM_ARCH/${pkg}-${VER}-1.${RPM_ARCH}.rpm" "$DIR/" && echo "  built $DIR/${pkg}-${VER}-1.${RPM_ARCH}.rpm" \
+      || { echo "  warn rpmbuild failed for $name:" >&2; tail -3 "$log" >&2; }
+    rm -f "$log"
     rm -rf "$d"
   }
 else
