@@ -1,6 +1,6 @@
 {
   "name": "deskagent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "DeskAgent — local-first personal agent with a self-memory system (Tauri 2 + React + TypeScript)",

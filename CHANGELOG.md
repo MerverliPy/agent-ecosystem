@@ -5,6 +5,22 @@ semver at a given milestone (they may diverge in later releases). A release is a
 `v<version>` (e.g. `v0.1.0`) mapping to `VERSION`, `CHANGELOG.md`, and all product manifests —
 enforced by `bash scripts/check-versions.sh`.
 
+## [0.1.1] — 2026-08-21
+
+Patch release. Builds on v0.1.0 with the release pipeline fully proven end-to-end.
+
+### Added
+- Native `.deb`/`.rpm` installers for the linux-amd64 CLIs (`scripts/build-native-installers.sh`).
+- GitHub Actions release pipeline hardened for the full inventory (per-target artifacts, GPG
+  signing, SBOM, GHCR container push, npm publish, `.deb`/`.rpm`).
+- `slopgate` published to npm as `@merverli/slopgate` (scoped name; unscoped `slopgate` is
+  rejected as too similar to the existing `slop-gate`).
+- Release notes (`docs/RELEASE-v0.1.0.md`) + project GPG public key
+  (`scripts/release-gpg-public.asc`) for verifying signed artifacts.
+
+### Changed
+- Unified versioning now enforces tag-vs-`VERSION` consistency (`check-versions.sh`).
+
 ## [0.1.0] — 2026-08-21
 
 First milestone release. Linux (amd64/arm64) + macOS (arm64/amd64) targets; the DeskAgent

@@ -1,6 +1,6 @@
 [package]
 name = "skillhub-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "SkillHub — cross-harness skill package manager CLI"
 repository = "https://github.com/MerverliPy/agent-ecosystem"

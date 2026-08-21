@@ -1,6 +1,6 @@
 {
   "name": "slopgate-dash",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "SlopGate dashboard — per-repo slop score history and trend lines from recorded check artifacts",
   "scripts": {

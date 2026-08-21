@@ -1,6 +1,6 @@
 {
   "name": "agent-ecosystem",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Agent ecosystem monorepo — BenchKit, SkillHub, SlopGate, DeskAgent (root convenience scripts)",
   "scripts": {

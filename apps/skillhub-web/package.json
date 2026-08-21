@@ -1,6 +1,6 @@
 {
   "name": "skillhub-web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "SkillHub — skill registry web site (search, badges, install commands)",
   "scripts": {
