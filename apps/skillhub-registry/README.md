@@ -49,6 +49,10 @@ ephemeral port and exercises publish → install → `verify --quality`.
 - **Input hardening:** manifests are validated against the embedded JSON-schema; file paths are
   checked against traversal/absolute-path patterns; per-file/total/body size caps are enforced.
 - **Rate limiting:** per-IP and per-token publish buckets plus a global read bucket (fixed-window).
+- **Abuse/DoS:** the DB is capped at ~1 GiB (`max_page_count`); unverified / `high_risk` packages are
+  quarantined — hidden from anonymous search/detail/files unless the client opts in with
+  `?quarantine=true`; download counts are batched in memory and flushed to the DB periodically
+  instead of a write per request.
 - **Secrets:** the signing secret and per-owner signing keys are never logged or embedded in
   build artifacts. Set `SKILLHUB_REGISTRY_SECRET` to a stable, secret value in production.
 

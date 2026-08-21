@@ -86,6 +86,24 @@ struct AppState {
     /// (never logged, never embedded in code); a random in-process secret is used in dev.
     secret: Vec<u8>,
     limiter: RateLimiter,
+    /// In-memory, batched download counts keyed by package id, flushed to the DB periodically
+    /// so a download flood doesn't hammer SQLite with a write per request (abuse/DoS control).
+    downloads: Arc<Mutex<HashMap<String, u64>>>,
+}
+
+/// Record a download in the in-memory batch (no immediate DB write).
+fn record_download(state: &AppState, name: &str) {
+    *state.downloads.lock().unwrap().entry(name.to_string()).or_insert(0) += 1;
+}
+
+/// Flush pending download counts to the DB and return how many were applied.
+fn flush_downloads(conn: &Connection, pending: &HashMap<String, u64>) -> anyhow::Result<u64> {
+    let mut total = 0u64;
+    for (name, n) in pending {
+        conn.execute("UPDATE packages SET downloads = downloads + ?1 WHERE name = ?2", rusqlite::params![n, name])?;
+        total += n;
+    }
+    Ok(total)
 }
 
 /// Validate a single `owner` or `name` segment against the canonical grammar
@@ -359,6 +377,9 @@ fn sign_package(signing_key: &ed25519_dalek::SigningKey, manifest: &serde_json::
 // ---------- schema + db layer ----------
 
 fn init(conn: &Connection) -> anyhow::Result<()> {
+    // abuse/DoS: cap the DB at ~1 GiB (262144 pages × 4096 B) so a flood of publishes can't
+    // exhaust disk. Once full, SQLite returns SQLITE_FULL and publishes fail with 500.
+    conn.pragma_update(None, "max_page_count", 262_144_i64)?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS packages (
             name TEXT PRIMARY KEY,
@@ -435,15 +456,17 @@ struct Detail {
     versions: Vec<VersionInfo>,
 }
 
-fn search_db(conn: &Connection, q: &str) -> anyhow::Result<Vec<Summary>> {
+fn search_db(conn: &Connection, q: &str, include_quarantined: bool) -> anyhow::Result<Vec<Summary>> {
     let like = format!("%{}%", q);
-    let mut stmt = conn.prepare(
+    let quarantine = if include_quarantined { "" } else { " AND p.verified = 1 AND p.high_risk = 0" };
+    let sql = format!(
         "SELECT p.name, p.description, p.license, p.repo, p.verified, p.high_risk, p.downloads,
                 (SELECT v.version FROM versions v WHERE v.name = p.name ORDER BY v.published_at DESC LIMIT 1)
          FROM packages p
-         WHERE p.name LIKE ?1 OR p.description LIKE ?1
-         ORDER BY p.downloads DESC, p.name",
-    )?;
+         WHERE (p.name LIKE ?1 OR p.description LIKE ?1){quarantine}
+         ORDER BY p.downloads DESC, p.name"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([&like], |r| {
         Ok(Summary {
             name: r.get(0)?,
@@ -461,8 +484,10 @@ fn search_db(conn: &Connection, q: &str) -> anyhow::Result<Vec<Summary>> {
     Ok(out)
 }
 
-fn detail_db(conn: &Connection, name: &str) -> anyhow::Result<Option<Detail>> {
-    let mut stmt = conn.prepare("SELECT description, license, repo, verified, high_risk, downloads FROM packages WHERE name = ?1")?;
+fn detail_db(conn: &Connection, name: &str, include_quarantined: bool) -> anyhow::Result<Option<Detail>> {
+    let quarantine = if include_quarantined { "" } else { " AND verified = 1 AND high_risk = 0" };
+    let sql = format!("SELECT description, license, repo, verified, high_risk, downloads FROM packages WHERE name = ?1{quarantine}");
+    let mut stmt = conn.prepare(&sql)?;
     let mut rows = stmt.query_map([name], |r| {
         Ok((
             r.get::<_, String>(0)?,
@@ -511,7 +536,16 @@ fn detail_db(conn: &Connection, name: &str) -> anyhow::Result<Option<Detail>> {
     }))
 }
 
-fn files_db(conn: &Connection, name: &str, version: &str) -> anyhow::Result<Option<HashMap<String, String>>> {
+fn files_db(conn: &Connection, name: &str, version: &str, include_quarantined: bool) -> anyhow::Result<Option<HashMap<String, String>>> {
+    // quarantine: a package is not served unless verified AND not high_risk, or the client opts in
+    let q: Option<i64> = conn.query_row(
+        "SELECT verified FROM packages WHERE name = ?1 AND (verified = 1 AND high_risk = 0)",
+        [name],
+        |r| r.get(0),
+    ).optional()?;
+    if !include_quarantined && q.is_none() {
+        return Ok(None);
+    }
     let mut stmt = conn.prepare("SELECT path, content FROM files WHERE name = ?1 AND version = ?2 ORDER BY path")?;
     let mut rows = stmt.query_map(rusqlite::params![name, version], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
     let mut files = HashMap::new();
@@ -547,39 +581,45 @@ async fn health() -> &'static str {
 #[derive(Debug, Deserialize)]
 struct SearchQuery {
     q: Option<String>,
+    /// Opt in to serving unverified / high-risk (quarantined) packages.
+    #[serde(default)]
+    quarantine: Option<bool>,
 }
 
-async fn search(State(state): State<AppState>, Query(q): Query<SearchQuery>) -> impl IntoResponse {
-    let q = q.q.unwrap_or_default();
+async fn search(State(state): State<AppState>, Query(params): Query<SearchQuery>) -> impl IntoResponse {
+    let q = params.q.unwrap_or_default();
+    let include_q = params.quarantine.unwrap_or(false);
     let db = state.db.lock().unwrap();
-    match search_db(&db, &q) {
+    match search_db(&db, &q, include_q) {
         Ok(items) => (StatusCode::OK, Json(items)).into_response(),
         Err(e) => internal_err(e),
     }
 }
 
-async fn pkg_detail(State(state): State<AppState>, Path((owner, name)): Path<(String, String)>) -> impl IntoResponse {
+async fn pkg_detail(State(state): State<AppState>, Path((owner, name)): Path<(String, String)>, Query(q): Query<SearchQuery>) -> impl IntoResponse {
+    let include_q = q.quarantine.unwrap_or(false);
     let full = match canonical_id(&format!("{owner}/{name}")) {
         Ok(f) => f,
         Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
     };
     let db = state.db.lock().unwrap();
-    match detail_db(&db, &full) {
+    match detail_db(&db, &full, include_q) {
         Ok(Some(d)) => (StatusCode::OK, Json(d)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "not found"}))).into_response(),
         Err(e) => internal_err(e),
     }
 }
 
-async fn pkg_files(State(state): State<AppState>, Path((owner, name, version)): Path<(String, String, String)>) -> impl IntoResponse {
+async fn pkg_files(State(state): State<AppState>, Path((owner, name, version)): Path<(String, String, String)>, Query(q): Query<SearchQuery>) -> impl IntoResponse {
+    let include_q = q.quarantine.unwrap_or(false);
     let full = match canonical_id(&format!("{owner}/{name}")) {
         Ok(f) => f,
         Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
     };
     let db = state.db.lock().unwrap();
-    match files_db(&db, &full, &version) {
+    match files_db(&db, &full, &version, include_q) {
         Ok(Some(files)) => {
-            let _ = bump_downloads(&db, &full);
+            record_download(&state, &full); // batched, not a per-request DB write
             (StatusCode::OK, Json(serde_json::json!({"files": files}))).into_response()
         }
         Ok(None) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "package or version not found"}))).into_response(),
@@ -905,7 +945,35 @@ async fn main() -> anyhow::Result<()> {
     let secret = std::env::var("SKILLHUB_REGISTRY_SECRET")
         .map(|s| s.into_bytes())
         .unwrap_or_else(|_| random_hex().into_bytes());
-    let state = AppState { db: Arc::new(Mutex::new(conn)), secret, limiter: RateLimiter::new(RateLimits::default()) };
+    let state = AppState {
+        db: Arc::new(Mutex::new(conn)),
+        secret,
+        limiter: RateLimiter::new(RateLimits::default()),
+        downloads: Arc::new(Mutex::new(HashMap::new())),
+    };
+
+    // background flusher: batch-apply in-memory download counts to the DB every 30s
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
+            loop {
+                ticker.tick().await;
+                let pending = std::mem::take(&mut *state.downloads.lock().unwrap());
+                if !pending.is_empty() {
+                    let db = state.db.lock().unwrap();
+                    if let Err(e) = flush_downloads(&db, &pending) {
+                        eprintln!("[skillhub-registry] download flush failed: {e}");
+                        // put back un-flushed counts so they aren't lost
+                        let mut m = state.downloads.lock().unwrap();
+                        for (k, v) in pending {
+                            *m.entry(k).or_insert(0) += v;
+                        }
+                    }
+                }
+            }
+        });
+    }
 
     let app = build_app(state);
 
@@ -988,15 +1056,15 @@ mod tests {
         assert_eq!(publish_db(&mut conn, &payload("A/b", "1.0.0", &[], true)).unwrap(), 400);
         assert_eq!(publish_db(&mut conn, &payload("a/b/c", "1.0.0", &[], true)).unwrap(), 400);
         assert_eq!(publish_db(&mut conn, &payload("demo/under_score", "1.0.0", &[], true)).unwrap(), 400);
-        assert!(search_db(&conn, "a").unwrap().is_empty());
-        assert!(detail_db(&conn, "demo/under_score").unwrap().is_none());
+        assert!(search_db(&conn, "a", false).unwrap().is_empty());
+        assert!(detail_db(&conn, "demo/under_score", false).unwrap().is_none());
     }
 
     #[test]
     fn publish_then_search() {
         let mut conn = mem_conn();
         assert_eq!(publish_db(&mut conn, &payload("demo/a", "1.0.0", &[("SKILL.md", "# hi")], true)).unwrap(), 201);
-        let res = search_db(&conn, "demo").unwrap();
+        let res = search_db(&conn, "demo", false).unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0].name, "demo/a");
         assert!(res[0].verified);
@@ -1014,22 +1082,22 @@ mod tests {
     fn detail_and_files_roundtrip() {
         let mut conn = mem_conn();
         publish_db(&mut conn, &payload("demo/c", "2.1.0", &[("SKILL.md", "# c"), ("scripts/run.sh", "echo hi")], false)).unwrap();
-        let d = detail_db(&conn, "demo/c").unwrap().unwrap();
+        let d = detail_db(&conn, "demo/c", true).unwrap().unwrap();
         assert_eq!(d.versions.len(), 1);
         assert_eq!(d.versions[0].version, "2.1.0");
         assert!(!d.verified);
-        let f = files_db(&conn, "demo/c", "2.1.0").unwrap().unwrap();
+        let f = files_db(&conn, "demo/c", "2.1.0", true).unwrap().unwrap();
         assert_eq!(f["scripts/run.sh"], "echo hi");
         bump_downloads(&conn, "demo/c").unwrap();
-        let d2 = detail_db(&conn, "demo/c").unwrap().unwrap();
+        let d2 = detail_db(&conn, "demo/c", true).unwrap().unwrap();
         assert_eq!(d2.downloads, 1);
     }
 
     #[test]
     fn unknown_package_404() {
         let conn = mem_conn();
-        assert!(detail_db(&conn, "nope/x").unwrap().is_none());
-        assert!(files_db(&conn, "nope/x", "1.0.0").unwrap().is_none());
+        assert!(detail_db(&conn, "nope/x", false).unwrap().is_none());
+        assert!(files_db(&conn, "nope/x", "1.0.0", false).unwrap().is_none());
     }
 
     // ---- HTTP integration: prove canonical_id() is the single path for lookups + publishes ----
@@ -1045,7 +1113,7 @@ mod tests {
     fn test_state_with_limits(limits: RateLimits) -> AppState {
         let conn = Connection::open_in_memory().unwrap();
         init(&conn).unwrap();
-        AppState { db: Arc::new(Mutex::new(conn)), secret: test_secret(), limiter: RateLimiter::new(limits) }
+        AppState { db: Arc::new(Mutex::new(conn)), secret: test_secret(), limiter: RateLimiter::new(limits), downloads: Arc::new(Mutex::new(HashMap::new())) }
     }
 
     // register an owner in the state's DB and return its signing key (mirrors CA issue)
@@ -1419,6 +1487,51 @@ mod tests {
         // valid grammar but unknown package -> 404, not 400
         let (s, _) = get(&app, "/api/packages/valid/unknown").await;
         assert_eq!(s, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn http_quarantine_hides_unverified_by_default() {
+        let state = test_state();
+        let key = register_key(&state, "demo");
+        let app = build_app(state);
+        let (token, _) = mint_token(&test_secret(), "demo", "publish:demo");
+        // publish an unverified (quarantined) package
+        let manifest = serde_json::json!({"name": "demo/risky", "version": "1.0.0", "description": "unverified",
+            "license": "MIT", "repo": "x", "harnesses": ["pi"]});
+        let files = HashMap::from([("SKILL.md".to_string(), "# risky".to_string())]);
+        // publish with scan.verified=false so the package is unverified (quarantined)
+        let sig = sign_package(&key, &manifest, &files);
+        let body = serde_json::json!({"manifest": manifest, "files": files, "scan": {"verified": false}, "signature": sig}).to_string();
+        let (s, _) = post_json(&app, "/api/publish", &body, Some(&token)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        // hidden from anonymous reads by default (quarantine)
+        let (s, _) = get(&app, "/api/search?q=risky").await;
+        assert!(s == StatusCode::OK);
+        let (_, body) = get(&app, "/api/search?q=risky").await;
+        assert!(body.contains("[]") || body.trim() == "[]" || !body.contains("risky"));
+        let (s, _) = get(&app, "/api/packages/demo/risky").await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+        let (s, _) = get(&app, "/api/packages/demo/risky/1.0.0/files").await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+        // explicit opt-in surfaces it
+        let (s, _) = get(&app, "/api/packages/demo/risky?quarantine=true").await;
+        assert_eq!(s, StatusCode::OK);
+        let (s, _) = get(&app, "/api/packages/demo/risky/1.0.0/files?quarantine=true").await;
+        assert_eq!(s, StatusCode::OK);
+    }
+
+    #[test]
+    fn batch_download_count_flush() {
+        let mut conn = mem_conn();
+        publish_db(&mut conn, &payload("demo/d", "1.0.0", &[], true)).unwrap();
+        // record into a batch, then flush
+        let mut pending = HashMap::new();
+        *pending.entry("demo/d".to_string()).or_insert(0) += 3;
+        assert_eq!(flush_downloads(&conn, &pending).unwrap(), 3);
+        let d = detail_db(&conn, "demo/d", false).unwrap().unwrap();
+        assert_eq!(d.downloads, 3);
+        // detail reflects flushed count without a per-request write
+        assert!(d.downloads == 3);
     }
 
     #[tokio::test]

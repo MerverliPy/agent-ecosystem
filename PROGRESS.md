@@ -845,3 +845,9 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 25/25 — +2); cargo build registry (exit 0)
 - EXIT CODES: verify 0; registry test 0; build 0
 - Lock verify: PASS
+
+### Task done: Abuse/DoS controls (max DB size, quarantine opt-in, batched download writes)
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (max_page_count ~1GiB cap in init; search_db/detail_db/files_db quarantine filter [verified=1 AND high_risk=0] behind `?quarantine=true` opt-in on search/detail/files handlers; in-memory batched download counter + record_download + flush_downloads + background 30s flusher in main; +http_quarantine_hides_unverified_by_default, +batch_download_count_flush); apps/skillhub-registry/README.md (Abuse/DoS bullet)
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 27/27 — +2); cargo test CLI (exit 0, 9/9); demo skillhub-install-demo.sh (exit 0, verified package readable, not quarantined)
+- EXIT CODES: verify 0; registry test 0; CLI test 0; demo 0
+- Lock verify: PASS
