@@ -15,8 +15,9 @@
 // gitignored, developer-seeded artifact with no real users. This build resets it under the
 // canonical `owner/name` model. No migration code ships — `init()` creates the schema fresh.
 use axum::{
-    extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    extract::{Path, Query, Request, State},
+    http::{HeaderMap, Method, StatusCode},
+    middleware::{self, Next},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -29,11 +30,62 @@ use std::sync::{Arc, Mutex};
 type Db = Arc<Mutex<Connection>>;
 
 #[derive(Clone)]
+struct RateLimits {
+    publish_ip: u32,    // per-IP publishes per window
+    publish_token: u32, // per-token publishes per window
+    read_global: u32,   // all reads per window
+    window_secs: i64,
+}
+
+impl Default for RateLimits {
+    fn default() -> Self {
+        Self { publish_ip: 30, publish_token: 60, read_global: 600, window_secs: 60 }
+    }
+}
+
+/// Minimal in-memory fixed-window token bucket (equivalent of tower-governor).
+#[derive(Clone)]
+struct RateLimiter {
+    inner: Arc<Mutex<HashMap<String, FixedWindow>>>,
+    limits: RateLimits,
+}
+
+#[derive(Default)]
+struct FixedWindow {
+    start: i64,
+    count: u32,
+}
+
+impl RateLimiter {
+    fn new(limits: RateLimits) -> Self {
+        Self { inner: Arc::new(Mutex::new(HashMap::new())), limits }
+    }
+
+    /// Consume one token from `key`'s bucket in the current window. False => over limit.
+    fn allow(&self, key: &str, limit: u32) -> bool {
+        let now = now_epoch();
+        let window_id = now / self.limits.window_secs;
+        let mut m = self.inner.lock().unwrap();
+        let e = m.entry(key.to_string()).or_default();
+        if e.start != window_id {
+            e.start = window_id;
+            e.count = 0;
+        }
+        if e.count >= limit {
+            return false;
+        }
+        e.count += 1;
+        true
+    }
+}
+
+#[derive(Clone)]
 struct AppState {
     db: Db,
     /// HMAC signing secret for capability tokens. From env SKILLHUB_REGISTRY_SECRET
     /// (never logged, never embedded in code); a random in-process secret is used in dev.
     secret: Vec<u8>,
+    limiter: RateLimiter,
 }
 
 /// Validate a single `owner` or `name` segment against the canonical grammar
@@ -582,9 +634,44 @@ async fn publish(State(state): State<AppState>, headers: HeaderMap, Json(payload
     }
 }
 
-// ---------- main ----------
+// ---------- rate limiting (fixed-window; per-IP + per-token on publish, global on reads) ----------
+
+fn rate_limited() -> axum::response::Response {
+    (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({"error": "rate limit exceeded, retry shortly"}))).into_response()
+}
+
+async fn rate_limit(State(state): State<AppState>, req: Request, next: Next) -> axum::response::Response {
+    let path = req.uri().path().to_string();
+    let ip = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next().map(|x| x.trim().to_string()))
+        .unwrap_or_else(|| "unknown".to_string());
+    let is_publish = req.method() == Method::POST && path.ends_with("/api/publish");
+    let is_read = req.method() == Method::GET && path.starts_with("/api/");
+
+    if is_publish {
+        let limits = &state.limiter.limits;
+        if !state.limiter.allow(&format!("publish:ip:{ip}"), limits.publish_ip) {
+            return rate_limited();
+        }
+        if let Some(t) = bearer_token(req.headers()) {
+            if !state.limiter.allow(&format!("publish:token:{t}"), limits.publish_token) {
+                return rate_limited();
+            }
+        }
+    } else if is_read {
+        let limits = &state.limiter.limits;
+        if !state.limiter.allow("read:global", limits.read_global) {
+            return rate_limited();
+        }
+    }
+    next.run(req).await
+}
 
 fn build_app(state: AppState) -> Router {
+    let mw_state = state.clone();
     Router::new()
         .route("/health", get(health))
         .route("/api/search", get(search))
@@ -593,6 +680,7 @@ fn build_app(state: AppState) -> Router {
         .route("/api/owners/register", post(register_owner))
         .route("/api/owners/revoke", post(revoke_token))
         .route("/api/publish", post(publish))
+        .layer(middleware::from_fn_with_state(mw_state, rate_limit))
         .with_state(state)
 }
 
@@ -611,7 +699,7 @@ async fn main() -> anyhow::Result<()> {
     let secret = std::env::var("SKILLHUB_REGISTRY_SECRET")
         .map(|s| s.into_bytes())
         .unwrap_or_else(|_| random_hex().into_bytes());
-    let state = AppState { db: Arc::new(Mutex::new(conn)), secret };
+    let state = AppState { db: Arc::new(Mutex::new(conn)), secret, limiter: RateLimiter::new(RateLimits::default()) };
 
     let app = build_app(state);
 
@@ -740,9 +828,13 @@ mod tests {
     }
 
     fn test_state() -> AppState {
+        test_state_with_limits(RateLimits::default())
+    }
+
+    fn test_state_with_limits(limits: RateLimits) -> AppState {
         let conn = Connection::open_in_memory().unwrap();
         init(&conn).unwrap();
-        AppState { db: Arc::new(Mutex::new(conn)), secret: test_secret() }
+        AppState { db: Arc::new(Mutex::new(conn)), secret: test_secret(), limiter: RateLimiter::new(limits) }
     }
 
     fn publish_body() -> String {
@@ -850,6 +942,56 @@ mod tests {
         // reads remain anonymous after revocation
         let (s, _) = get(&app, "/api/packages/rev/pkg").await;
         assert_eq!(s, StatusCode::OK);
+    }
+
+    #[test]
+    fn rate_limiter_bucket_window_resets() {
+        let limits = RateLimits { publish_ip: 2, window_secs: 60, ..RateLimits::default() };
+        let lim = limits.publish_ip;
+        let rl = RateLimiter::new(limits);
+        assert!(rl.allow("k", lim));
+        assert!(rl.allow("k", lim));
+        assert!(!rl.allow("k", lim)); // over limit
+        // a different key is independent
+        assert!(rl.allow("other", lim));
+    }
+
+    #[tokio::test]
+    async fn http_publish_rate_limited_by_ip() {
+        let mut limits = RateLimits::default();
+        limits.publish_ip = 2;
+        let app = build_app(test_state_with_limits(limits));
+        let (token, _) = mint_token(&test_secret(), "demo", "publish:demo");
+        // two distinct publish requests consume the per-IP bucket, third is rejected
+        let req = |v: &str| {
+            let body2 = serde_json::json!({
+                "manifest": {"name": "demo/rl", "version": v, "description": "rl",
+                             "license": "MIT", "repo": "x", "harnesses": ["pi"]},
+                "files": {"SKILL.md": "# rl"},
+                "scan": {"verified": true}
+            }).to_string();
+            body2
+        };
+        let (s, _) = post_json(&app, "/api/publish", &req("1.0.0"), Some(&token)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        let (s, _) = post_json(&app, "/api/publish", &req("1.0.1"), Some(&token)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        let (s, _) = post_json(&app, "/api/publish", &req("1.0.2"), Some(&token)).await;
+        assert_eq!(s, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn http_reads_rate_limited_globally() {
+        let mut limits = RateLimits::default();
+        limits.read_global = 3;
+        let app = build_app(test_state_with_limits(limits));
+        // reads share a global bucket; after the cap, further reads are rejected
+        for _ in 0..3 {
+            let (s, _) = get(&app, "/api/search?q=x").await;
+            assert_eq!(s, StatusCode::OK);
+        }
+        let (s, _) = get(&app, "/api/search?q=x").await;
+        assert_eq!(s, StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[tokio::test]

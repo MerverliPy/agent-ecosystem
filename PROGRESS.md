@@ -821,3 +821,9 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 12/12 — +1); cargo build + cargo test CLI (exit 0, 9/9, pre-existing warnings)
 - EXIT CODES: verify 0; registry test 0; CLI build 0; CLI test 0
 - Lock verify: PASS
+
+### Task done: Rate limiting (per-IP/per-token publish, global reads)
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (RateLimiter fixed-window token bucket + RateLimits; axum from_fn_with_state rate_limit middleware applied globally — publish keyed by publish:ip:{ip} + publish:token:{token}, reads by read:global; 429 rejection; test_state_with_limits; +3 tests [unit window, publish-per-IP 429, global-read 429])
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 15/15 — +3); cargo build registry (exit 0); demo skillhub-install-demo.sh (exit 0, unaffected by limits)
+- EXIT CODES: verify 0; registry test 0; build 0; demo 0
+- Lock verify: PASS

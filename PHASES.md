@@ -160,7 +160,7 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Enforce a package-name grammar and a single `canonical_id()` path for all lookups and publishes.
 - [x] Introduce owner namespaces with per-owner publish scope (only the owning identity may publish under `owner/*`).
 - [x] Add authentication/authorization for publish via self-contained, scoped, revocable capability tokens; keep read anonymous; never log or env-embed secrets.
-- [ ] Add rate limiting (per-IP and per-token token buckets on publish; global read limits) using tower + governor or equivalent.
+- [x] Add rate limiting (per-IP and per-token token buckets on publish; global read limits) using tower + governor or equivalent.
 - [ ] Harden input validation: semver, manifest JSON-schema, package/file size caps, path-traversal guard on `files` keys, content-type checks, request body cap.
 - [ ] Add publish integrity: package signing verified against a registry CA that issues per-owner keys; owner key rollover/revocation support.
 - [ ] Harden transport/runtime: TLS termination guidance, bind-address policy, structured errors with no internal detail leakage, default-deny posture.
