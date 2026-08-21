@@ -65,6 +65,7 @@ See `deploy/` (docker-compose + Caddy TLS + systemd unit) for deployment.
 | Installers | `skillhub-cli-installer.sh`, `skillhub-cli.rb` (Homebrew), `skillhub-cli-x86_64-unknown-linux-gnu.tar.xz` |
 | Web static dists | `web.tar.gz` (bench-site, skillhub-web, slopgate-dash) |
 | Action | `slopgate-action.tar.gz` |
+| npm package | `slopgate-0.1.0.tgz` (npm-publishable tarball) |
 
 ---
 
@@ -85,8 +86,9 @@ See `deploy/` (docker-compose + Caddy TLS + systemd unit) for deployment.
 
 ## Known limitations / deferred
 
-- **npm publish** of `slopgate` is wired but not yet published (requires the npm package to be
-  created; the `NPM_TOKEN` secret is now configured for a future run).
+- **npm publish** of `slopgate` is wired (`NPM_TOKEN` set) but the npm account requires 2FA for
+  publishing (`EOTP`); a publishable tarball (`slopgate-0.1.0.tgz`) is attached to this release.
+  Publishing to npm requires an npm **Automation** token (bypasses 2FA) — swap it in and re-run.
 - **`.deb`/`.rpm`** installers require `cargo dist init` in the two Rust workspaces
   (documented); the shell/Homebrew installers and per-target tarballs are provided now.
 - macOS installers via cargo-dist are produced on macOS runners in a follow-up.
