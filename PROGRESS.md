@@ -762,3 +762,16 @@ satisfaction of the DoD.
   original (4002 < 4611): the 60-line draft bar predated adding the missing canonical-commands,
   safety, mobile, release, and handoff sections. Global AGENTS.md takes effect next Pi launch;
   agents' frontmatter unchanged.
+
+### Task done: Wire deskagent to local ollama (home LLM server, item 4)
+- FILES CHANGED: none in repo (zero git diff; runtime model choice persisted in
+  user-space store ~/.local/share/deskagent/*.db via `deskagent models --pick`)
+- VALIDATIONS RUN:
+  - `cargo test -p deskagent-core -- --ignored ollama_live --nocapture` -> exit 0
+    (LIVE ollama qwen2.5:1.5b-pi -> "Hello!")
+  - `deskagent chat "Reply with exactly two words: ping pong"` -> exit 0
+    (model: qwen2.5-coder:14b-pi (runtime), reply "ping pong", 1 citation)
+  - `bash scripts/run-all-checks.sh` -> exit 0, passed 20 / failed 0,
+    RUN-ALL-CHECKS-OK
+- EXIT CODES: cargo test 0, deskagent chat 0, run-all-checks 0
+- Lock verify: PASS (verify OK before and after; no repo files touched)
