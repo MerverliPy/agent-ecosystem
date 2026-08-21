@@ -20,6 +20,7 @@ sha2 = "0.10"
 base64 = "0.22"
 rand = "0.8"
 jsonschema = "0.24"
+ed25519-dalek = "2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

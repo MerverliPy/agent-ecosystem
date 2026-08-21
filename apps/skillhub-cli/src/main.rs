@@ -5,8 +5,40 @@ mod registry;
 mod scan;
 
 use clap::{Parser, Subcommand};
+use ed25519_dalek::Signer;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+fn b64url(data: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
+}
+
+fn b64url_decode(s: &str) -> Option<Vec<u8>> {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(s).ok()
+}
+
+/// Canonical byte string signed by the publisher — must match the registry's package_digest_input.
+fn package_digest_input(manifest: &serde_json::Value, files: &HashMap<String, String>) -> Vec<u8> {
+    let mut out = serde_json::to_vec(manifest).unwrap_or_default();
+    let mut paths: Vec<&String> = files.keys().collect();
+    paths.sort();
+    for p in paths {
+        out.extend_from_slice(format!("{p}\x00{}\n", files[p].len()).as_bytes());
+        out.extend_from_slice(files[p].as_bytes());
+    }
+    out
+}
+
+fn sign_package(signing_key_b64: &str, manifest: &serde_json::Value, files: &HashMap<String, String>) -> anyhow::Result<String> {
+    let bytes = b64url_decode(signing_key_b64).ok_or_else(|| anyhow::anyhow!("invalid base64url signing key"))?;
+    let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| anyhow::anyhow!("signing key must be 32 bytes"))?;
+    let key = ed25519_dalek::SigningKey::from_bytes(&arr);
+    let digest = package_digest_input(manifest, files);
+    Ok(b64url(&key.sign(&digest).to_bytes()))
+}
 
 #[derive(Parser)]
 #[command(name = "skillhub", version, about = "SkillHub — cross-harness skill package manager")]
@@ -70,6 +102,12 @@ enum Command {
         /// The token to revoke
         token: String,
     },
+    /// Roll over the owner's signing key (present a valid capability token)
+    Rotate {
+        /// Publish capability token (else $SKILLHUB_TOKEN)
+        #[arg(long)]
+        token: Option<String>,
+    },
     /// Publish a local skill directory to the registry (runs the scanner first)
     Publish {
         /// Path to skillhub.json
@@ -80,6 +118,9 @@ enum Command {
         /// Publish capability token (else $SKILLHUB_TOKEN)
         #[arg(long)]
         token: Option<String>,
+        /// Ed25519 signing key (base64url) to sign the package (else $SKILLHUB_SIGNING_KEY)
+        #[arg(long)]
+        signing_key: Option<String>,
     },
 }
 
@@ -97,7 +138,8 @@ fn main() -> anyhow::Result<()> {
         Command::Harnesses => cmd_harnesses(),
         Command::Register { owner } => cmd_register(&client, owner),
         Command::Revoke { token } => cmd_revoke(&client, token),
-        Command::Publish { manifest, files_dir, token } => cmd_publish(&client, manifest, Path::new(files_dir), token.as_deref()),
+        Command::Rotate { token } => cmd_rotate(&client, token.as_deref()),
+        Command::Publish { manifest, files_dir, token, signing_key } => cmd_publish(&client, manifest, Path::new(files_dir), token.as_deref(), signing_key.as_deref()),
     }
 }
 
@@ -393,14 +435,28 @@ fn cmd_revoke(client: &registry::Client, token: &str) -> anyhow::Result<()> {
 }
 
 fn cmd_register(client: &registry::Client, owner: &str) -> anyhow::Result<()> {
-    let (registered, token) = client.register_owner(owner)?;
+    let v = client.register_owner(owner)?;
+    let registered = v["owner"].as_str().unwrap_or(owner);
+    let token = v["token"].as_str().unwrap_or_default();
+    let signing_key = v["signing_key"].as_str().unwrap_or_default();
     println!("owner registered: {registered}");
     println!("export SKILLHUB_TOKEN={token}");
-    println!("  (keep this capability token secret; it grants publish scope for {registered}/*)");
+    println!("export SKILLHUB_SIGNING_KEY={signing_key}");
+    println!("  (keep both secret: token grants publish scope, signing key authenticates your packages for {registered}/*)");
     Ok(())
 }
 
-fn cmd_publish(client: &registry::Client, manifest_path: &str, files_dir: &Path, token: Option<&str>) -> anyhow::Result<()> {
+fn cmd_rotate(client: &registry::Client, token: Option<&str>) -> anyhow::Result<()> {
+    let token = token.map(|t| t.to_string()).or_else(|| std::env::var("SKILLHUB_TOKEN").ok())
+        .ok_or_else(|| anyhow::anyhow!("rotate needs a capability token (--token or $SKILLHUB_TOKEN)"))?;
+    let v = client.rotate_key(&token)?;
+    let signing_key = v["signing_key"].as_str().unwrap_or_default();
+    println!("owner {} signing key rotated", v["owner"].as_str().unwrap_or(""));
+    println!("export SKILLHUB_SIGNING_KEY={signing_key}");
+    Ok(())
+}
+
+fn cmd_publish(client: &registry::Client, manifest_path: &str, files_dir: &Path, token: Option<&str>, signing_key: Option<&str>) -> anyhow::Result<()> {
     let raw = fs::read_to_string(manifest_path)?;
     let m = manifest::Manifest::from_json(&raw)?;
     anyhow::ensure!(files_dir.is_dir(), "--files-dir must be a directory");
@@ -430,13 +486,26 @@ fn cmd_publish(client: &registry::Client, manifest_path: &str, files_dir: &Path,
         }
     }
 
-    let payload = serde_json::json!({
-        "manifest": serde_json::to_value(&m)?,
+    let manifest_value = serde_json::to_value(&m)?;
+    // signing key: --signing-key flag, else $SKILLHUB_SIGNING_KEY
+    let signing_key = signing_key.map(|k| k.to_string()).or_else(|| std::env::var("SKILLHUB_SIGNING_KEY").ok());
+    let signature = match signing_key.as_deref() {
+        Some(k) if !k.is_empty() => Some(sign_package(k, &manifest_value, &files)?),
+        _ => None,
+    };
+    let mut payload = serde_json::json!({
+        "manifest": manifest_value,
         "files": files,
         "scan": serde_json::to_value(&report)?,
     });
+    if let Some(sig) = &signature {
+        payload["signature"] = serde_json::json!(sig);
+    }
     // publish token: --token flag, else $SKILLHUB_TOKEN
     let token = token.map(|t| t.to_string()).or_else(|| std::env::var("SKILLHUB_TOKEN").ok());
+    if signature.is_none() {
+        println!("NOTE: no signing key set (--signing-key or $SKILLHUB_SIGNING_KEY) — registry will reject unsigned publishes");
+    }
     let status = client.publish(&payload, token.as_deref())?;
     match status {
         201 => println!("published {} v{} (verified: {})", m.name, m.version, report.verified),

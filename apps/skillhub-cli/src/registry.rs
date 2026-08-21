@@ -66,15 +66,19 @@ impl Client {
         Ok(resp.into_json()?)
     }
 
-    /// Register an owner and mint its first publish capability token.
-    pub fn register_owner(&self, owner: &str) -> anyhow::Result<(String, String)> {
+    /// Register an owner; the CA returns the capability token and a per-owner signing key.
+    pub fn register_owner(&self, owner: &str) -> anyhow::Result<serde_json::Value> {
         let url = format!("{}/api/owners/register", self.base);
         let body = serde_json::json!({ "owner": owner });
         let resp = ureq::post(&url).send_json(&body)?;
-        let v: serde_json::Value = resp.into_json()?;
-        let owner_out = v["owner"].as_str().unwrap_or(owner).to_string();
-        let token = v["token"].as_str().ok_or_else(|| anyhow::anyhow!("register did not return a token"))?.to_string();
-        Ok((owner_out, token))
+        Ok(resp.into_json()?)
+    }
+
+    /// Roll over the owner's signing key.
+    pub fn rotate_key(&self, token: &str) -> anyhow::Result<serde_json::Value> {
+        let url = format!("{}/api/owners/rotate", self.base);
+        let resp = ureq::post(&url).send_json(&serde_json::json!({ "token": token }))?;
+        Ok(resp.into_json()?)
     }
 
     /// Revoke a capability token by presenting it (self-revocation).

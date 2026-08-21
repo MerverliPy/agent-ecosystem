@@ -20,10 +20,11 @@ for i in $(seq 1 40); do
 done
 curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 || { echo "registry did not start"; cat "$TMP/reg.log"; exit 1; }
 
-echo "0) register owner 'demo' and mint its publish capability token"
-DEMO_TOKEN="$(curl -sf -X POST "http://127.0.0.1:$PORT/api/owners/register" \
-  -H 'content-type: application/json' -d '{"owner":"demo"}' | jq -r .token)"
-export SKILLHUB_TOKEN="$DEMO_TOKEN"
+echo "0) register owner 'demo' and mint its publish capability + signing key"
+REG_JSON="$(curl -sf -X POST "http://127.0.0.1:$PORT/api/owners/register" \
+  -H 'content-type: application/json' -d '{"owner":"demo"}')"
+export SKILLHUB_TOKEN="$(printf '%s' "$REG_JSON" | jq -r .token)"
+export SKILLHUB_SIGNING_KEY="$(printf '%s' "$REG_JSON" | jq -r .signing_key)"
 
 echo "1) publish the benign fixture (runs the security scanner first)"
 "$CLI" publish "$ROOT/apps/skillhub-cli/fixtures/benign-skill/skillhub.json" \

@@ -833,3 +833,9 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 20/20 — +5); demo skillhub-install-demo.sh (exit 0, CLI manifest with dependencies:[] still passes strict schema)
 - EXIT CODES: verify 0; registry test 0; demo 0
 - Lock verify: PASS
+
+### Task done: Publish integrity — per-owner Ed25519 signing (registry CA) + rollover/revocation
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (owners.pubkey/revoked columns; CA issues per-owner Ed25519 keypair on register, stores pubkey, returns signing_key; package_digest_input canonical bytes; publish verifies signature against owner pubkey → 403 on missing/malformed/mismatch; owner-level revoked check; /api/owners/rotate key rollover; /api/owners/revoke-owner; +http_publish_requires_valid_signature, +http_key_rotation_invalidates_old_key, +http_owner_revocation_blocks_publish; sign_package/signing_key_from_b64 cfg(test)); Cargo.toml (+ed25519-dalek 2); apps/skillhub-cli/src/main.rs (+ed25519 sign_package + package_digest_input, Publish --signing-key / $SKILLHUB_SIGNING_KEY, Rotate cmd, register prints signing_key); apps/skillhub-cli/src/registry.rs (register_owner/rotate_key return full JSON); apps/skillhub-cli/Cargo.toml (+ed25519-dalek, base64); scripts/demos/skillhub-install-demo.sh (export SKILLHUB_SIGNING_KEY)
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 23/23 — +3); cargo build registry (exit 0, 0 warnings); cargo test CLI (exit 0, 9/9); demo skillhub-install-demo.sh (exit 0, signature-verified publish)
+- EXIT CODES: verify 0; registry test 0; registry build 0; CLI test 0; demo 0
+- Lock verify: PASS

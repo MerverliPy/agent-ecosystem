@@ -162,7 +162,7 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Add authentication/authorization for publish via self-contained, scoped, revocable capability tokens; keep read anonymous; never log or env-embed secrets.
 - [x] Add rate limiting (per-IP and per-token token buckets on publish; global read limits) using tower + governor or equivalent.
 - [x] Harden input validation: semver, manifest JSON-schema, package/file size caps, path-traversal guard on `files` keys, content-type checks, request body cap.
-- [ ] Add publish integrity: package signing verified against a registry CA that issues per-owner keys; owner key rollover/revocation support.
+- [x] Add publish integrity: package signing verified against a registry CA that issues per-owner keys; owner key rollover/revocation support.
 - [ ] Harden transport/runtime: TLS termination guidance, bind-address policy, structured errors with no internal detail leakage, default-deny posture.
 - [ ] Add abuse/DoS controls: max DB size, quarantine of unverified/`high_risk` packages behind explicit opt-in, batch download-count writes.
 - [ ] Enforce artifact hygiene: runtime DB (`*.db`), seed tokens, and signing secrets stay out of git and out of any container image; add a guard so no build step copies them into a release artifact.

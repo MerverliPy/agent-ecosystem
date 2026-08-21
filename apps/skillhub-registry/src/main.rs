@@ -194,6 +194,18 @@ fn record_capability(conn: &Connection, claims: &Claims) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn owner_revoked(conn: &Connection, owner: &str) -> bool {
+    conn.query_row("SELECT revoked FROM owners WHERE owner = ?1", [owner], |r| r.get::<_, i64>(0))
+        .map(|r| r != 0)
+        .unwrap_or(false)
+}
+
+fn owner_pubkey(conn: &Connection, owner: &str) -> Option<String> {
+    conn.query_row("SELECT pubkey FROM owners WHERE owner = ?1", [owner], |r| r.get::<_, String>(0))
+        .ok()
+        .filter(|p| !p.is_empty())
+}
+
 /// True if the token's jti has been explicitly revoked.
 fn is_revoked(conn: &Connection, jti: &str) -> bool {
     conn.query_row(
@@ -290,6 +302,60 @@ fn validate_files(files: &HashMap<String, String>) -> Result<(), &'static str> {
     Ok(())
 }
 
+// ---------- package signing (registry CA issues per-owner Ed25519 keys) ----------
+// The registry acts as a CA: on registration it generates a per-owner Ed25519 keypair, stores
+// the public key, and returns the signing key to the owner. Publishers sign the canonical
+// package digest; the registry verifies the signature against the owner's stored public key.
+
+use ed25519_dalek::{Signer, Verifier};
+
+fn owner_keypair() -> ed25519_dalek::SigningKey {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    ed25519_dalek::SigningKey::from_bytes(&bytes)
+}
+
+fn pubkey_b64(key: &ed25519_dalek::SigningKey) -> String {
+    b64url(key.verifying_key().as_bytes())
+}
+
+fn signing_key_b64(key: &ed25519_dalek::SigningKey) -> String {
+    b64url(key.as_bytes())
+}
+
+#[cfg(test)]
+fn signing_key_from_b64(s: &str) -> Option<ed25519_dalek::SigningKey> {
+    let bytes = b64url_decode(s)?;
+    let arr: [u8; 32] = bytes.as_slice().try_into().ok()?;
+    Some(ed25519_dalek::SigningKey::from_bytes(&arr))
+}
+
+fn pubkey_from_b64(s: &str) -> Option<ed25519_dalek::VerifyingKey> {
+    let bytes = b64url_decode(s)?;
+    let arr: [u8; 32] = bytes.as_slice().try_into().ok()?;
+    ed25519_dalek::VerifyingKey::from_bytes(&arr).ok()
+}
+
+/// Canonical byte string signed by the publisher: the manifest bytes followed by each file
+/// (paths sorted, length-prefixed). Both CLI and registry compute this identically.
+fn package_digest_input(manifest: &serde_json::Value, files: &HashMap<String, String>) -> Vec<u8> {
+    let mut out = serde_json::to_vec(manifest).unwrap_or_default();
+    let mut paths: Vec<&String> = files.keys().collect();
+    paths.sort();
+    for p in paths {
+        out.extend_from_slice(format!("{p}\x00{}\n", files[p].len()).as_bytes());
+        out.extend_from_slice(files[p].as_bytes());
+    }
+    out
+}
+
+#[cfg(test)]
+fn sign_package(signing_key: &ed25519_dalek::SigningKey, manifest: &serde_json::Value, files: &HashMap<String, String>) -> String {
+    let digest = package_digest_input(manifest, files);
+    b64url(&signing_key.sign(&digest).to_bytes())
+}
+
 // ---------- schema + db layer ----------
 
 fn init(conn: &Connection) -> anyhow::Result<()> {
@@ -323,6 +389,8 @@ fn init(conn: &Connection) -> anyhow::Result<()> {
         );
         CREATE TABLE IF NOT EXISTS owners (
             owner TEXT PRIMARY KEY,
+            pubkey TEXT NOT NULL DEFAULT '',
+            revoked INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS capabilities (
@@ -516,6 +584,9 @@ struct PublishPayload {
     manifest: serde_json::Value,
     files: HashMap<String, String>,
     scan: serde_json::Value,
+    /// base64url Ed25519 signature over the canonical package digest (manifest + files).
+    #[serde(default)]
+    signature: Option<String>,
 }
 
 fn publish_db(conn: &mut Connection, p: &PublishPayload) -> anyhow::Result<u16> {
@@ -611,10 +682,13 @@ async fn register_owner(State(state): State<AppState>, Json(payload): Json<Regis
     if !valid_segment(&payload.owner) {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid owner — must match [a-z0-9][a-z0-9-]*"}))).into_response();
     }
+    // the registry CA issues a fresh per-owner Ed25519 keypair; only the public key is stored
+    let keypair = owner_keypair();
+    let pubkey = pubkey_b64(&keypair);
     let db = state.db.lock().unwrap();
     if let Err(e) = db.execute(
-        "INSERT OR IGNORE INTO owners (owner, created_at) VALUES (?1, ?2)",
-        rusqlite::params![payload.owner, now_iso()],
+        "INSERT OR REPLACE INTO owners (owner, pubkey, revoked, created_at) VALUES (?1, ?2, 0, ?3)",
+        rusqlite::params![payload.owner, pubkey, now_iso()],
     ) {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
     }
@@ -622,7 +696,50 @@ async fn register_owner(State(state): State<AppState>, Json(payload): Json<Regis
     if let Err(e) = record_capability(&db, &claims) {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
     }
-    (StatusCode::CREATED, Json(serde_json::json!({"owner": payload.owner, "token": token}))).into_response()
+    (StatusCode::CREATED, Json(serde_json::json!({
+        "owner": payload.owner, "token": token,
+        "pubkey": pubkey, "signing_key": signing_key_b64(&keypair),
+    }))).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct RotateReq {
+    token: String,
+}
+
+/// Roll over the owner's signing key: the CA issues a fresh keypair and the owner keeps the
+/// new signing key. The previous public key stops verifying — effectively rotating the key.
+async fn rotate_owner_key(State(state): State<AppState>, Json(payload): Json<RotateReq>) -> impl IntoResponse {
+    let claims = match verify_token(&state.secret, &payload.token) {
+        Some(c) => c,
+        None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid or expired token"}))).into_response(),
+    };
+    let db = state.db.lock().unwrap();
+    if is_revoked(&db, &claims.jti) || owner_revoked(&db, &claims.sub) {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "token or owner revoked"}))).into_response();
+    }
+    let keypair = owner_keypair();
+    let pubkey = pubkey_b64(&keypair);
+    if let Err(e) = db.execute("UPDATE owners SET pubkey = ?2 WHERE owner = ?1", rusqlite::params![claims.sub, pubkey]) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+    }
+    (StatusCode::OK, Json(serde_json::json!({
+        "owner": claims.sub, "pubkey": pubkey, "signing_key": signing_key_b64(&keypair),
+    }))).into_response()
+}
+
+/// Revoke an owner namespace: mark it revoked and revoke all of its capability tokens.
+async fn revoke_owner(State(state): State<AppState>, Json(payload): Json<RotateReq>) -> impl IntoResponse {
+    let claims = match verify_token(&state.secret, &payload.token) {
+        Some(c) => c,
+        None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid or expired token"}))).into_response(),
+    };
+    let db = state.db.lock().unwrap();
+    if let Err(e) = db.execute("UPDATE owners SET revoked = 1 WHERE owner = ?1", [&claims.sub]) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+    }
+    let _ = db.execute("UPDATE capabilities SET revoked = 1 WHERE owner = ?1", [&claims.sub]);
+    (StatusCode::OK, Json(serde_json::json!({"status": "owner revoked", "owner": claims.sub}))).into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -682,6 +799,27 @@ async fn publish(State(state): State<AppState>, headers: HeaderMap, Json(payload
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": format!("owner '{}' cannot publish under '{pkg_owner}/*'", claims.sub)}))).into_response();
     }
     let mut db = state.db.lock().unwrap();
+    if owner_revoked(&db, &claims.sub) {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "owner has been revoked"}))).into_response();
+    }
+    // publish integrity: signature must verify against the owner's registered public key
+    let signature = match payload.signature.as_deref() {
+        Some(s) if !s.is_empty() => s,
+        _ => return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "missing package signature"}))).into_response(),
+    };
+    let vk = match owner_pubkey(&db, &claims.sub).and_then(|p| pubkey_from_b64(&p)) {
+        Some(v) => v,
+        None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "owner has no registered signing key"}))).into_response(),
+    };
+    let sig_bytes = match b64url_decode(signature) {
+        Some(s) if s.len() == 64 => s,
+        _ => return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "malformed signature"}))).into_response(),
+    };
+    let digest = package_digest_input(&payload.manifest, &payload.files);
+    let sig = ed25519_dalek::Signature::from_bytes(sig_bytes.as_slice().try_into().unwrap());
+    if vk.verify(&digest, &sig).is_err() {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "signature does not match owner public key"}))).into_response();
+    }
     match publish_db(&mut db, &payload) {
         Ok(201) => (StatusCode::CREATED, Json(serde_json::json!({"status": "published"}))).into_response(),
         Ok(409) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": "version already exists (immutable)"}))).into_response(),
@@ -735,7 +873,9 @@ fn build_app(state: AppState) -> Router {
         .route("/api/packages/{owner}/{name}", get(pkg_detail))
         .route("/api/packages/{owner}/{name}/{version}/files", get(pkg_files))
         .route("/api/owners/register", post(register_owner))
+        .route("/api/owners/rotate", post(rotate_owner_key))
         .route("/api/owners/revoke", post(revoke_token))
+        .route("/api/owners/revoke-owner", post(revoke_owner))
         .route("/api/publish", post(publish))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_TOTAL_SIZE + 64 * 1024)) // request body cap
         .layer(middleware::from_fn_with_state(mw_state, rate_limit))
@@ -811,6 +951,7 @@ mod tests {
             }),
             files: files.iter().map(|(p, c)| (p.to_string(), c.to_string())).collect(),
             scan: serde_json::json!({"verified": verified, "findings": []}),
+            signature: None,
         }
     }
 
@@ -895,6 +1036,33 @@ mod tests {
         AppState { db: Arc::new(Mutex::new(conn)), secret: test_secret(), limiter: RateLimiter::new(limits) }
     }
 
+    // register an owner in the state's DB and return its signing key (mirrors CA issue)
+    fn register_key(state: &AppState, owner: &str) -> ed25519_dalek::SigningKey {
+        let key = owner_keypair();
+        let db = state.db.lock().unwrap();
+        db.execute(
+            "INSERT OR REPLACE INTO owners (owner, pubkey, revoked, created_at) VALUES (?1,?2,0,?3)",
+            rusqlite::params![owner, pubkey_b64(&key), now_iso()],
+        )
+        .unwrap();
+        key
+    }
+
+    // build a publish body signed by the owner's signing key
+    fn signed_body(key: &ed25519_dalek::SigningKey, manifest: &serde_json::Value, files: &HashMap<String, String>) -> String {
+        let signature = sign_package(key, manifest, files);
+        serde_json::json!({"manifest": manifest, "files": files, "scan": {"verified": true}, "signature": signature}).to_string()
+    }
+
+    fn demo_manifest() -> serde_json::Value {
+        serde_json::json!({"name": "demo/acme-skill", "version": "1.0.0", "description": "http test skill",
+            "license": "MIT", "repo": "https://example.com/repo", "harnesses": ["pi"]})
+    }
+
+    fn demo_files() -> HashMap<String, String> {
+        HashMap::from([("SKILL.md".to_string(), "# http".to_string())])
+    }
+
     fn publish_body() -> String {
         serde_json::json!({
             "manifest": {
@@ -931,10 +1099,13 @@ mod tests {
 
     #[tokio::test]
     async fn http_publish_then_reads_via_canonical_id() {
-        let app = build_app(test_state());
+        let state = test_state();
+        let key = register_key(&state, "demo");
+        let app = build_app(state);
         let (token, _) = mint_token(&test_secret(), "demo", "publish:demo");
-        // publish valid owner/name with the owner's token -> 201
-        let (s, _) = post_json(&app, "/api/publish", &publish_body(), Some(&token)).await;
+        // publish valid owner/name with the owner's token + signature -> 201
+        let body = signed_body(&key, &demo_manifest(), &demo_files());
+        let (s, _) = post_json(&app, "/api/publish", &body, Some(&token)).await;
         assert_eq!(s, StatusCode::CREATED);
         // read back via the URL owner/name key-space -> 200 (reads stay anonymous, same canonical id)
         let (s, body) = get(&app, "/api/packages/demo/acme-skill").await;
@@ -943,6 +1114,23 @@ mod tests {
         let (s, body) = get(&app, "/api/packages/demo/acme-skill/1.0.0/files").await;
         assert_eq!(s, StatusCode::OK);
         assert!(body.contains("# http"));
+    }
+
+    #[tokio::test]
+    async fn http_publish_requires_valid_signature() {
+        let state = test_state();
+        let key = register_key(&state, "demo");
+        let other = register_key(&state, "other");
+        let app = build_app(state);
+        let (token, _) = mint_token(&test_secret(), "demo", "publish:demo");
+        // missing signature -> 403
+        let body = serde_json::json!({"manifest": demo_manifest(), "files": demo_files(), "scan": {"verified": true}}).to_string();
+        let (s, _) = post_json(&app, "/api/publish", &body, Some(&token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
+        // signature made by a different key (not 'demo'/'other' registered for 'demo') -> 403
+        let bad = signed_body(&other, &demo_manifest(), &demo_files());
+        let (s, _) = post_json(&app, "/api/publish", &bad, Some(&token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -979,15 +1167,14 @@ mod tests {
         // register owner -> minted + recorded capability
         let (s, body) = post_json(&app, "/api/owners/register", r#"{"owner":"rev"}"#, None).await;
         assert_eq!(s, StatusCode::CREATED);
-        let token = serde_json::from_str::<serde_json::Value>(&body).unwrap()["token"]
-            .as_str().unwrap().to_string();
-        // publish succeeds with the recorded token
-        let publish_rev = serde_json::json!({
-            "manifest": {"name": "rev/pkg", "version": "1.0.0", "description": "revocable",
-                         "license": "MIT", "repo": "x", "harnesses": ["pi"]},
-            "files": {"SKILL.md": "# r"},
-            "scan": {"verified": true}
-        }).to_string();
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let token = v["token"].as_str().unwrap().to_string();
+        let key = signing_key_from_b64(v["signing_key"].as_str().unwrap()).unwrap();
+        // publish succeeds with the recorded token + valid signature
+        let rev_manifest = serde_json::json!({"name": "rev/pkg", "version": "1.0.0", "description": "revocable",
+            "license": "MIT", "repo": "x", "harnesses": ["pi"]});
+        let rev_files = HashMap::from([("SKILL.md".to_string(), "# r".to_string())]);
+        let publish_rev = signed_body(&key, &rev_manifest, &rev_files);
         let (s, _) = post_json(&app, "/api/publish", &publish_rev, Some(&token)).await;
         assert_eq!(s, StatusCode::CREATED);
         // revoke the token
@@ -1018,17 +1205,16 @@ mod tests {
     async fn http_publish_rate_limited_by_ip() {
         let mut limits = RateLimits::default();
         limits.publish_ip = 2;
-        let app = build_app(test_state_with_limits(limits));
+        let state = test_state_with_limits(limits);
+        let key = register_key(&state, "demo");
+        let app = build_app(state);
         let (token, _) = mint_token(&test_secret(), "demo", "publish:demo");
         // two distinct publish requests consume the per-IP bucket, third is rejected
         let req = |v: &str| {
-            let body2 = serde_json::json!({
-                "manifest": {"name": "demo/rl", "version": v, "description": "rl",
-                             "license": "MIT", "repo": "x", "harnesses": ["pi"]},
-                "files": {"SKILL.md": "# rl"},
-                "scan": {"verified": true}
-            }).to_string();
-            body2
+            let manifest = serde_json::json!({"name": "demo/rl", "version": v, "description": "rl",
+                "license": "MIT", "repo": "x", "harnesses": ["pi"]});
+            let files = HashMap::from([("SKILL.md".to_string(), "# rl".to_string())]);
+            signed_body(&key, &manifest, &files)
         };
         let (s, _) = post_json(&app, "/api/publish", &req("1.0.0"), Some(&token)).await;
         assert_eq!(s, StatusCode::CREATED);
@@ -1069,9 +1255,10 @@ mod tests {
         }
     }
 
-    async fn publish_json(app: &Router, manifest: serde_json::Value, files: serde_json::Value) -> StatusCode {
+    async fn publish_json(app: &Router, key: &ed25519_dalek::SigningKey, manifest: serde_json::Value, files: serde_json::Value) -> StatusCode {
+        let files_map: HashMap<String, String> = serde_json::from_value(files).unwrap();
+        let body = signed_body(key, &manifest, &files_map);
         let token = mint_token(&test_secret(), "demo", "publish:demo").0;
-        let body = serde_json::json!({ "manifest": manifest, "files": files, "scan": {"verified": true} }).to_string();
         post_json(app, "/api/publish", &body, Some(&token)).await.0
     }
 
@@ -1083,33 +1270,92 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn http_key_rotation_invalidates_old_key() {
+        let state = test_state();
+        let app = build_app(state);
+        // register owner -> CA issues a signing key
+        let (s, body) = post_json(&app, "/api/owners/register", r#"{"owner":"rot"}"#, None).await;
+        assert_eq!(s, StatusCode::CREATED);
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let token = v["token"].as_str().unwrap().to_string();
+        let key1 = signing_key_from_b64(v["signing_key"].as_str().unwrap()).unwrap();
+        let manifest = serde_json::json!({"name": "rot/s", "version": "1.0.0", "description": "d",
+            "license": "MIT", "repo": "x", "harnesses": ["pi"]});
+        let files = HashMap::from([("SKILL.md".to_string(), "# s".to_string())]);
+        // publish with key1 -> 201
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key1, &manifest, &files), Some(&token)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        // rotate -> new signing key
+        let (s, body) = post_json(&app, "/api/owners/rotate", &serde_json::json!({"token": token}).to_string(), None).await;
+        assert_eq!(s, StatusCode::OK);
+        let key2 = signing_key_from_b64(serde_json::from_str::<serde_json::Value>(&body).unwrap()["signing_key"].as_str().unwrap()).unwrap();
+        // old key no longer verifies -> 403
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key1, &manifest, &files), Some(&token)).await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
+        // new key verifies -> 409 (dup version) means signature passed
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key2, &manifest, &files), Some(&token)).await;
+        assert_eq!(s, StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn http_owner_revocation_blocks_publish() {
+        let state = test_state();
+        let app = build_app(state);
+        let (s, body) = post_json(&app, "/api/owners/register", r#"{"owner":"doomed"}"#, None).await;
+        assert_eq!(s, StatusCode::CREATED);
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let token = v["token"].as_str().unwrap().to_string();
+        let key = signing_key_from_b64(v["signing_key"].as_str().unwrap()).unwrap();
+        let manifest = serde_json::json!({"name": "doomed/s", "version": "1.0.0", "description": "d",
+            "license": "MIT", "repo": "x", "harnesses": ["pi"]});
+        let files = HashMap::from([("SKILL.md".to_string(), "# s".to_string())]);
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key, &manifest, &files), Some(&token)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        // revoke the owner namespace
+        let (s, _) = post_json(&app, "/api/owners/revoke-owner", &serde_json::json!({"token": token}).to_string(), None).await;
+        assert_eq!(s, StatusCode::OK);
+        // further publishes rejected
+        let (s, _) = post_json(&app, "/api/publish", &signed_body(&key, &manifest, &files), Some(&token)).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+        // reads still anonymous
+        let (s, _) = get(&app, "/api/packages/doomed/s").await;
+        assert_eq!(s, StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn http_publish_rejects_bad_semver() {
-        let app = build_app(test_state());
+        let state = test_state();
+        let key = register_key(&state, "demo");
+        let app = build_app(state);
         for bad in ["1.0", "1.0.0.0", "v1.0.0", "1.0.a", ""] {
             let mut m = base_manifest();
             m["version"] = serde_json::json!(bad);
-            let s = publish_json(&app, m, serde_json::json!({})).await;
+            let s = publish_json(&app, &key, m, serde_json::json!({})).await;
             assert_eq!(s, StatusCode::BAD_REQUEST, "version '{bad}' must be rejected");
         }
     }
 
     #[tokio::test]
     async fn http_publish_rejects_path_traversal() {
-        let app = build_app(test_state());
+        let state = test_state();
+        let key = register_key(&state, "demo");
+        let app = build_app(state);
         for bad_path in ["../evil.sh", "/etc/passwd", "a/../b", "..", "a//b"] {
             let mut files = serde_json::json!({});
             files[bad_path] = serde_json::json!("#!/bin/sh");
-            let s = publish_json(&app, base_manifest(), files).await;
+            let s = publish_json(&app, &key, base_manifest(), files).await;
             assert_eq!(s, StatusCode::BAD_REQUEST, "path '{bad_path}' must be rejected");
         }
     }
 
     #[tokio::test]
     async fn http_publish_rejects_extra_manifest_field() {
-        let app = build_app(test_state());
+        let state = test_state();
+        let key = register_key(&state, "demo");
+        let app = build_app(state);
         let mut m = base_manifest();
         m["author"] = serde_json::json!("attacker"); // additionalProperties: false
-        let s = publish_json(&app, m, serde_json::json!({})).await;
+        let s = publish_json(&app, &key, m, serde_json::json!({})).await;
         assert_eq!(s, StatusCode::BAD_REQUEST);
     }
 
