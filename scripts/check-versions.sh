@@ -38,9 +38,10 @@ for p in slopgate slopgate-action slopgate-dash bench-site skillhub-web deskagen
 done
 expect "root" "$(json_ver package.json)"
 
-# tag-to-version consistency: when running under CI on a release tag, GITHUB_REF_NAME is
-# set (e.g. v0.1.0). It must equal "v$VER", so a wrongly named tag can't publish a mismatch.
-if [ -n "${GITHUB_REF_NAME:-}" ]; then
+# tag-to-version consistency: ONLY when the run is triggered by a release tag (GITHUB_REF_TYPE
+# == tag). A manually-dispatched run on a branch (e.g. main) must not be subject to the tag check.
+# The tag must equal "v$VER", so a wrongly named tag can't publish a version mismatch.
+if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
   if [ "$GITHUB_REF_NAME" = "v$VER" ]; then
     echo "  ok   tag $GITHUB_REF_NAME matches v$VER"
   else
