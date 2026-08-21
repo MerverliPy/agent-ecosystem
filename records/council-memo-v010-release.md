@@ -47,3 +47,32 @@ The plan content (all phases COMPLETE, lock verify PASS, local `run-all-checks` 
 ## What would change the decision
 
 A clean GitHub-hosted **dry run** of the exact release commit that passes all 4 matrix targets after dependency + system-package install, producing target-qualified assets matching `install.sh`, a published/exported image, a validated SBOM + checksums, and a decision on scope/signing/npm/license. Until then, do not push `v0.1.0`.
+
+---
+
+## Resolution status (2026-08-21, after human chose "fix blockers, full inventory")
+
+All in-repo blockers fixed and committed (main `f79f10a`):
+
+| # | Status |
+|---|--------|
+| 1 npm ci | ✅ release.yml `checks` job installs deps for all apps |
+| 2 gen-sbom | ✅ publish job runs `gen-sbom.sh` before gate |
+| 3 per-target naming | ✅ `skillhub-<target>`/`deskagent-<target>`; install.sh + gate aligned |
+| 4 webkit/gtk | ✅ `checks` job installs WebKit/GTK for Tauri cargo check |
+| 5 LICENSE | ✅ root `LICENSE` (MIT) + `license` fields (slopgate, both skillhub crates) |
+| 6 signing | ✅ import RELEASE_GPG_KEY → `sign-artifacts.sh` signs; gate verifies sig when present (unsigned if no key) |
+| 7 full inventory | ✅ GHCR container push; web dists + slopgate-action assembled + uploaded; cargo-dist installers best-effort (needs `cargo dist init`) |
+| 8 npm | ✅ gated on `secrets.NPM_TOKEN`; `npm pack --dry-run` before publish |
+| 9 install.sh REPO | ✅ default `MerverliPy/agent-ecosystem` |
+| 10 version gate | ✅ check-versions includes `tauri.conf.json` + tag-vs-VERSION (`GITHUB_REF_NAME`) |
+| 11 systemd | ✅ `StateDirectory=skillhub-registry` |
+| 12 README | ✅ Milestone 2 / Phases 9–10 marked COMPLETE |
+| 13 hardening | ✅ root `.dockerignore`; per-target gate; cargo-dist noted as follow-up |
+
+**Remaining external requirements (need the human / CI):**
+- Add secrets `RELEASE_GPG_KEY` + `GPG_KEY_ID` (for signed release) and `NPM_TOKEN` (for npm publish) to the repo.
+- Run `cargo dist init` in the two Rust workspaces to actually produce `.deb`/`.rpm`/Homebrew installers (currently best-effort).
+- Run a **clean GitHub CI dry run** on the corrected pipeline before pushing the `v0.1.0` tag.
+
+The release-gate was validated locally against the full inventory (8 per-target binaries + web + action + SBOM + checksums → RELEASE-GATE-OK). Docker build validated with root context + `.dockerignore`. Tag push is still deferred pending a clean CI dry run.
