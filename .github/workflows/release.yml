@@ -1,0 +1,89 @@
+# Release pipeline — triggered on a `v<version>` tag push.
+#
+# For each in-scope product it builds + signs artifacts for linux (amd64/arm64) and
+# macOS (arm64/amd64), runs the general validation surrogate, and attaches everything to a
+# GitHub Release. DEC-0005 compliant: no telemetry, no external services beyond the build host.
+#
+# NOT run on pull requests. The general CI surrogate remains `run-all-checks.sh`; this
+# pipeline is release-only and calls `release-gate.sh` before publishing.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # Signing keys / provenance come from repository secrets, never committed.
+  #   RELEASE_GPG_KEY  (optional) — armored signing key for artifact signatures
+
+jobs:
+  release:
+    name: release ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04   # linux amd64
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04   # linux arm64
+            target: aarch64-unknown-linux-gnu
+          - os: macos-14       # macOS amd64
+            target: x86_64-apple-darwin
+          - os: macos-14       # macOS arm64
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # General CI surrogate before anything is published.
+      - name: run-all-checks
+        run: bash scripts/run-all-checks.sh
+
+      # Build the Rust CLIs (skillhub + deskagent) for this target.
+      - name: build skillhub
+        run: |
+          rustup target add ${{ matrix.target }}
+          cargo build --release --manifest-path apps/skillhub-cli/Cargo.toml --target ${{ matrix.target }}
+      - name: build deskagent-cli
+        run: cargo build --release --manifest-path apps/deskagent/Cargo.toml -p deskagent-cli --target ${{ matrix.target }}
+
+      # Build the registry container + web static dists (linux host only).
+      - name: build registry container (linux amd64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: docker build -t skillhub-registry:latest apps/skillhub-registry
+
+      - name: build web static dists
+        run: bash scripts/build-web-dist.sh
+
+      # Assemble artifacts into dist/release and sign them.
+      - name: assemble + sign artifacts
+        run: |
+          mkdir -p dist/release
+          cp apps/skillhub-cli/target/${{ matrix.target }}/release/skillhub dist/release/
+          cp apps/deskagent/target/${{ matrix.target }}/release/deskagent dist/release/
+          bash scripts/sign-artifacts.sh dist/release
+
+      # Release-only gate must pass before upload.
+      - name: release-gate
+        run: bash scripts/release-gate.sh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/release/*
+            dist/release/SHA256SUMS
+            dist/release/SHA256SUMS.sig
+          generate_release_notes: true

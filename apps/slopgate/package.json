@@ -1,11 +1,17 @@
 {
   "name": "slopgate",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "SlopGate — deterministic rule pack + scorer for AI-slop code, prose, commits and PR text",
+  "files": [
+    "bin",
+    "src"
+  ],
   "bin": {
     "slop": "./bin/slop.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=22.6.0"

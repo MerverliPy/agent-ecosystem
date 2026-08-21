@@ -1,0 +1,32 @@
+# systemd unit for the skillhub-registry binary (systemd/compose deployment option).
+# Place the binary at /usr/local/bin/skillhub-registry and install with:
+#   sudo install -m 0644 skillhub-registry.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now skillhub-registry
+#
+# The registry binds loopback by default; put a TLS-terminating reverse proxy in front
+# (see README Security / TLS termination). Secrets come from EnvironmentFile (0600), never
+# baked into the binary.
+[Unit]
+Description=SkillHub skill registry API
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+# Provide the HMAC signing secret here (file mode 0600, git-ignored).
+EnvironmentFile=-/etc/skillhub-registry.env
+Environment=SKILLHUB_REGISTRY_DB=/var/lib/skillhub-registry/skillhub.db
+Environment=SKILLHUB_REGISTRY_BIND=127.0.0.1
+Environment=SKILLHUB_REGISTRY_PORT=8787
+ExecStart=/usr/local/bin/skillhub-registry
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/skillhub-registry
+
+[Install]
+WantedBy=multi-user.target

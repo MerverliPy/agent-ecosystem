@@ -9,3 +9,9 @@ members = ["src-tauri", "src-tauri/crates/deskagent-core", "src-tauri/crates/des
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+
+# cargo-dist installers for the `deskagent` CLI (Tauri GUI excluded/deferred)
+[workspace.metadata.dist]
+cargo-dist-version = "0.28.0"
+installers = ["shell", "homebrew", "cargo"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin"]

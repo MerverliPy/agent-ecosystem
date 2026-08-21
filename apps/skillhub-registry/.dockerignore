@@ -1,0 +1,14 @@
+# keep runtime DBs, secrets, keys, and build caches OUT of the build context (artifact hygiene)
+**/target
+**/node_modules
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.env
+**/*.key
+**/plan.key
+.git
+.github
+scripts
+records
+dist

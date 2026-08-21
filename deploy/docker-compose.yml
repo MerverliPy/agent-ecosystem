@@ -1,0 +1,40 @@
+# Deploy the secured SkillHub registry + a TLS-terminating reverse proxy (Caddy).
+#   docker compose up -d
+# Secrets are read from the environment / .env (git-ignored); they are never baked into images.
+services:
+  registry:
+    build:
+      context: ..
+      dockerfile: apps/skillhub-registry/Dockerfile
+    restart: unless-stopped
+    environment:
+      # supply a stable secret here or via the host environment (never commit it)
+      SKILLHUB_REGISTRY_SECRET: "${SKILLHUB_REGISTRY_SECRET:?set a stable secret in the environment}"
+      SKILLHUB_REGISTRY_DB: /data/skillhub.db
+      SKILLHUB_REGISTRY_BIND: 0.0.0.0
+      SKILLHUB_REGISTRY_PORT: "8787"
+    volumes:
+      - registry-data:/data
+    expose:
+      - "8787"
+    networks: [registry]
+
+  # TLS termination in front of the registry (loopback-bound registry is never exposed publicly)
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on: [registry]
+    networks: [registry]
+
+volumes:
+  registry-data:
+  caddy-data:
+
+networks:
+  registry:

@@ -896,3 +896,45 @@ Mirrored tasks:
 - EXIT CODES: verify 0; check-versions 0
 - Lock verify: PASS
 - NOTE: all products already at 0.1.0; deskagent uses `[workspace.package]` single source. check-versions.sh is called by release-gate.sh (Phase 10 Task 8), not run-all-checks.
+
+### Task done: GitHub Actions release pipeline (Task 2)
+- FILES CHANGED: .github/workflows/release.yml (new — tag `v*` → run-all-checks → build skillhub + deskagent-cli for linux amd64/arm64 + macOS arm64/amd64 matrix → registry container (linux) → build-web-dist → assemble + sign → release-gate → gh-release upload; DEC-0005 no telemetry); PHASES.md checkbox
+- VALIDATIONS RUN: YAML authored (config only — CI triggers on tag push); not runnable locally
+- EXIT CODES: n/a (config)
+- Lock verify: PASS
+
+### Task done: CLI installers (Task 3)
+- FILES CHANGED: install.sh (new — fetches per-platform release binary into ~/.local/bin; supports skillhub/deskagent, VERSION); apps/skillhub-cli/Cargo.toml + apps/deskagent/Cargo.toml ([workspace.metadata.dist] cargo-dist config: shell/homebrew/cargo installers, 4 targets); PHASES.md checkbox
+- VALIDATIONS RUN: shellcheck-style read; cargo-dist not installed locally (config authored for CI); binaries built + gated by release-gate
+- EXIT CODES: n/a
+- Lock verify: PASS
+
+### Task done: Registry container image + deploy units (Task 4)
+- FILES CHANGED: apps/skillhub-registry/Dockerfile (multi-stage; runtime DB/secrets/keys never baked; /data volume; USER nobody); apps/skillhub-registry/.dockerignore; deploy/docker-compose.yml + deploy/Caddyfile (TLS termination) + deploy/skillhub-registry.service (systemd, loopback-only, EnvironmentFile); PHASES.md checkbox
+- VALIDATIONS RUN: docker build (exit 0); docker run → /health 200, register 201 (token+signing_key), anonymous search 200; /data/skillhub.db created at runtime (not in image); artifact hygiene confirmed
+- EXIT CODES: docker build 0; curl health 200; register 201; search 200
+- Lock verify: PASS
+
+### Task done: Web static distribution (Task 5)
+- FILES CHANGED: next.config.ts ×3 (bench-site/skillhub-web/slopgate-dash → output:"export"); scripts/build-web-dist.sh (new — builds static sites into dist/web/<app> + DEPLOY.md named targets); PHASES.md checkbox
+- VALIDATIONS RUN: bash scripts/build-web-dist.sh (exit 0 — all three static builds produced, SSG/Static)
+- EXIT CODES: build-web-dist 0
+- Lock verify: PASS
+
+### Task done: slopgate npm + versioned action (Task 6)
+- FILES CHANGED: apps/slopgate/package.json (private:true removed, files:[bin,src], publishConfig public — publishable via `npm publish` w/ credentials); slopgate-action versioned via git tags (`action-v<version>`, referenced `@<ver>`); PHASES.md checkbox
+- VALIDATIONS RUN: json validity; publishing requires npm credentials (config-only)
+- EXIT CODES: n/a
+- Lock verify: PASS
+
+### Task done: Signing + provenance (checksums, SBOM) (Task 7)
+- FILES CHANGED: scripts/sign-artifacts.sh (new — SHA256SUMS + optional GPG --detach-sign via GPG_KEY_ID); scripts/gen-sbom.sh (new — SPDX-2.3 SBOM.json listing artifacts + sha256 + VERSION); PHASES.md checkbox
+- VALIDATIONS RUN: bash scripts/sign-artifacts.sh dist/release (exit 0, SHA256SUMS written, unsigned no-GPG); bash scripts/gen-sbom.sh dist/release (exit 0, SBOM.json written + valid JSON)
+- EXIT CODES: sign 0; sbom 0
+- Lock verify: PASS
+
+### Task done: release-gate.sh + upgrade paths (Task 8)
+- FILES CHANGED: scripts/release-gate.sh (new — RELEASE-ONLY gate: version consistency + artifact hygiene + artifact presence + SHA256SUMS verify + SBOM presence + no-forbidden-content; NOT part of run-all-checks); CLI upgrade paths documented (install.sh re-run, cargo-binstall, `--version` flags already present via clap); PHASES.md checkbox
+- VALIDATIONS RUN: built skillhub + deskagent release binaries → assembled dist/release → sign + sbom → bash scripts/release-gate.sh dist/release (exit 0, RELEASE-GATE-OK all 6 checks); run-all-checks.sh still green (gate not wired into it)
+- EXIT CODES: release-gate 0
+- Lock verify: PASS

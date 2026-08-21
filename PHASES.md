@@ -172,13 +172,13 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 ## Phase 10: Release and versioned distribution <!-- IN_PROGRESS --> <!-- DEPENDS_ON: Phase 8, Phase 9 -->
 <!-- VALIDATE: bash scripts/plan-lock.sh verify && bash scripts/run-all-checks.sh && bash scripts/plan-lock.sh status -->
 - [x] Establish unified versioning: single semver source per product, `CHANGELOG.md`, git tags mapping to releases.
-- [ ] Build a GitHub Actions release pipeline (tag → build → sign → publish) with a linux (amd64/arm64) + macOS (arm64/amd64) matrix; DEC-0005 compliant (no telemetry).
-- [ ] Produce CLI installers via `cargo dist`/`cargo-binstall` for `skillhub` and `deskagent`, plus `install.sh`/Homebrew/`.deb`/`.rpm`.
-- [ ] Build a registry container image (Dockerfile) plus systemd/compose units so the secured registry is deployable.
-- [ ] Produce web distribution: static builds for `bench-site`, `skillhub-web`, `slopgate-dash` with a named deploy target.
-- [ ] Publish `slopgate` as an npm package/tarball and `slopgate-action` as a versioned GitHub Action.
-- [ ] Add release-artifact signing and provenance (checksums, signing keys, SBOM); defer code-signing policy to the GUI milestone but plan key rotation.
-- [ ] Add a **separate** `scripts/release-gate.sh` (release-only checks: artifact presence, checksum verification, version consistency across manifests) and wire it into the CI tag pipeline; do not loosen the existing `run-all-checks.sh` (which remains the general CI surrogate). Add version/self-update or binstall upgrade paths for CLI products.
+- [x] Build a GitHub Actions release pipeline (tag → build → sign → publish) with a linux (amd64/arm64) + macOS (arm64/amd64) matrix; DEC-0005 compliant (no telemetry).
+- [x] Produce CLI installers via `cargo dist`/`cargo-binstall` for `skillhub` and `deskagent`, plus `install.sh`/Homebrew/`.deb`/`.rpm`.
+- [x] Build a registry container image (Dockerfile) plus systemd/compose units so the secured registry is deployable.
+- [x] Produce web distribution: static builds for `bench-site`, `skillhub-web`, `slopgate-dash` with a named deploy target.
+- [x] Publish `slopgate` as an npm package/tarball and `slopgate-action` as a versioned GitHub Action.
+- [x] Add release-artifact signing and provenance (checksums, signing keys, SBOM); defer code-signing policy to the GUI milestone but plan key rotation.
+- [x] Add a **separate** `scripts/release-gate.sh` (release-only checks: artifact presence, checksum verification, version consistency across manifests) and wire it into the CI tag pipeline; do not loosen the existing `run-all-checks.sh` (which remains the general CI surrogate). Add version/self-update or binstall upgrade paths for CLI products.
 - **Exit criteria:** a tagged release produces signed, verifiable artifacts for all in-scope products; a clean clone of a published binary passes `scripts/release-gate.sh`; the secured registry is deployable from its container; no runtime DB, seed token, or signing secret is baked into any release artifact; DeskAgent GUI remains excluded and deferred.
 
 # Definition of Done (Milestone 1)

@@ -1,0 +1,11 @@
+# Caddy reverse proxy — terminates TLS and forwards to the loopback-bound registry.
+# Replace skillhub.example.com with your domain. Caddy auto-provisions TLS certs.
+skillhub.example.com {
+	reverse_proxy registry:8787
+	header {
+		# pass the real client IP through for rate limiting
+		X-Forwarded-For {remote_host}
+		Strict-Transport-Security "max-age=31536000"
+	}
+	encode gzip
+}
