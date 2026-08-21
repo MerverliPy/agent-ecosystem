@@ -3,6 +3,7 @@ name = "skillhub-registry"
 version = "0.1.0"
 edition = "2021"
 description = "SkillHub — skill registry API (axum + SQLite)"
+license = "MIT"
 
 [[bin]]
 name = "skillhub-registry"

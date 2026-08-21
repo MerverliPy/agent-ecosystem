@@ -3,7 +3,7 @@
 A monorepo building four interoperable products around the agent/AI ecosystem, driven by a **content-locked build plan**.
 
 > **Status legend:** ✅ Complete · 🔄 In progress · ⏸️ Deferred
-> Phases 1–8 **✅ COMPLETE** (Milestone 1 accepted) · Milestone 2 in progress — Phases 9–10 **🔄 pending**
+> Phases 1–8, 8.5, 9, 10 **✅ COMPLETE** · Milestone 1 + Milestone 2 accepted
 
 ## Start here
 
@@ -95,7 +95,7 @@ records/         per-phase handoff records
 
 ## Status
 
-Phases 1–8 are **✅ COMPLETE** (Milestone 1 accepted; Milestone 2 in progress — Phases 9–10 **🔄 pending**).
+All phases (1–8, 8.5, 9, 10) are **✅ COMPLETE** · Milestone 1 + Milestone 2 accepted.
 Every product is built, validated, and cross-wired:
 
 - BenchKit data + `will-it-run` feed **DeskAgent's** model picker (live fetch, bundled offline fallback).

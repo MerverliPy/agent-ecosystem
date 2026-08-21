@@ -3,6 +3,7 @@ name = "skillhub-cli"
 version = "0.1.0"
 edition = "2021"
 description = "SkillHub — cross-harness skill package manager CLI"
+license = "MIT"
 
 [[bin]]
 name = "skillhub"

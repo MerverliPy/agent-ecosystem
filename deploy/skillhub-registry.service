@@ -26,6 +26,8 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+# create + own the runtime dir so the DB can be written (User=nobody)
+StateDirectory=skillhub-registry
 ReadWritePaths=/var/lib/skillhub-registry
 
 [Install]

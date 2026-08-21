@@ -1,11 +1,16 @@
-# Release pipeline — triggered on a `v<version>` tag push.
+# Release pipeline — triggered on a `v<version>` tag push (or manual dispatch).
 #
-# For each in-scope product it builds + signs artifacts for linux (amd64/arm64) and
-# macOS (arm64/amd64), runs the general validation surrogate, and attaches everything to a
-# GitHub Release. DEC-0005 compliant: no telemetry, no external services beyond the build host.
+# Full-inventory release for linux (amd64/arm64) + macOS (arm64/amd64):
+#   checks  -> install Node + system deps, run the general validation surrogate (run-all-checks)
+#   build   -> matrix: build skillhub + deskagent-cli per target, staged with per-target names
+#   publish -> collect all binaries, web static dists, action; sign + SBOM + checksum; run
+#              release-gate; push registry container to GHCR; npm-publish slopgate (gated);
+#              upload everything to the GitHub Release.
+# DEC-0005 compliant: no telemetry.
 #
-# NOT run on pull requests. The general CI surrogate remains `run-all-checks.sh`; this
-# pipeline is release-only and calls `release-gate.sh` before publishing.
+# Required repo secrets (only when the gated steps should run):
+#   RELEASE_GPG_KEY (+ GPG_KEY_ID)  — armored signing key for artifact signatures
+#   NPM_TOKEN                       — for `npm publish` of apps/slopgate
 name: release
 
 on:
@@ -16,85 +21,153 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
-  # linux-arm64 cross linker (installed in the matrix step below)
+  # linux-arm64 cross linker (installed in the build matrix below)
   CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-  # Signing keys / provenance come from repository secrets, never committed.
-  #   RELEASE_GPG_KEY  (optional) — armored signing key for artifact signatures
-  #   NPM_TOKEN        (required for `npm publish` of slopgate)
 
 jobs:
-  release:
-    name: release ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-22.04   # linux amd64
-            target: x86_64-unknown-linux-gnu
-          - os: ubuntu-22.04   # linux arm64
-            target: aarch64-unknown-linux-gnu
-          - os: macos-14       # macOS amd64
-            target: x86_64-apple-darwin
-          - os: macos-14       # macOS arm64
-            target: aarch64-apple-darwin
+  # ---- 1. general validation surrogate, with dependencies installed ----
+  checks:
+    name: checks
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      # General CI surrogate before anything is published.
+      - uses: dtolnay/rust-toolchain@stable
+      # Tauri shell `cargo check` needs WebKit/GTK on Linux
+      - name: install webkit/gtk system deps
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+      # clean runners have no node_modules; install every app that run-all-checks exercises
+      - name: npm ci (all apps)
+        run: |
+          set -e
+          for d in slopgate slopgate-action slopgate-dash bench-site skillhub-web deskagent; do
+            echo "== npm ci apps/$d =="
+            (cd "apps/$d" && npm ci --no-audit --no-fund)
+          done
       - name: run-all-checks
         run: bash scripts/run-all-checks.sh
 
-      # linux-arm64 needs a cross C compiler + linker to build Rust crates.
+  # ---- 2. build the two Rust CLIs per target (per-target names) ----
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-22.04, target: aarch64-unknown-linux-gnu }
+          - { os: macos-14,    target: x86_64-apple-darwin }
+          - { os: macos-14,    target: aarch64-apple-darwin }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - name: install linux-arm64 cross linker
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      # Build the Rust CLIs (skillhub + deskagent) for this target.
       - name: build skillhub
-        run: |
-          rustup target add ${{ matrix.target }}
-          cargo build --release --manifest-path apps/skillhub-cli/Cargo.toml --target ${{ matrix.target }}
+        run: cargo build --release --manifest-path apps/skillhub-cli/Cargo.toml --target ${{ matrix.target }}
       - name: build deskagent-cli
         run: cargo build --release --manifest-path apps/deskagent/Cargo.toml -p deskagent-cli --target ${{ matrix.target }}
-
-      # Build the registry container + web static dists (linux amd64 host only).
-      - name: build registry container (linux amd64)
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: docker build -f apps/skillhub-registry/Dockerfile -t skillhub-registry:latest .
-
-      - name: build web static dists
-        run: bash scripts/build-web-dist.sh
-
-      # Assemble artifacts into dist/release and sign them.
-      - name: assemble + sign artifacts
+      - name: stage binaries (per-target names)
         run: |
           mkdir -p dist/release
-          cp apps/skillhub-cli/target/${{ matrix.target }}/release/skillhub dist/release/
-          cp apps/deskagent/target/${{ matrix.target }}/release/deskagent dist/release/
-          bash scripts/sign-artifacts.sh dist/release
+          cp apps/skillhub-cli/target/${{ matrix.target }}/release/skillhub dist/release/skillhub-${{ matrix.target }}
+          cp apps/deskagent/target/${{ matrix.target }}/release/deskagent dist/release/deskagent-${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/release/
 
-      # Release-only gate must pass before upload.
+  # ---- 3. assemble the full inventory, prove it, and publish ----
+  publish:
+    name: publish
+    runs-on: ubuntu-22.04
+    needs: [checks, build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: download all target binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          pattern: release-*
+          merge-multiple: true
+      - name: build web static dists
+        run: bash scripts/build-web-dist.sh
+      - name: assemble web + action into release
+        run: |
+          mkdir -p dist/release
+          # dirs (release-gate checks these) + tarballs (attached to the GitHub Release)
+          cp -r dist/web dist/release/web
+          mkdir -p /tmp/action && cp apps/slopgate-action/{action.yml,main.mjs,package.json} /tmp/action/
+          cp -r /tmp/action dist/release/slopgate-action
+          tar -czf dist/release/web.tar.gz -C dist/web .
+          tar -czf dist/release/slopgate-action.tar.gz -C /tmp/action .
+      # optional cargo-dist installers (.deb/.rpm/homebrew) — best effort; requires prior
+      # `cargo dist init`. If not initialized, installers are omitted (does not fail the gate).
+      # .deb/.rpm/homebrew installers via cargo-dist. PREREQUISITE: run `cargo dist init`
+      # in apps/skillhub-cli and apps/deskagent (generates dist-manifest + CI) and commit it.
+      # Until then this is best-effort and produces nothing; it does not fail the gate.
+      - name: cargo-dist installers (best effort)
+        continue-on-error: true
+        run: |
+          cargo install cargo-dist --locked >/dev/null 2>&1 || true
+          for w in skillhub-cli deskagent; do
+            (cd "apps/$w" && cargo dist build --artifacts=all) >/dev/null 2>&1 || true
+          done
+          find apps -path '*/target/distrib/*' -type f -exec cp -f {} dist/release/ \; 2>/dev/null || true
+      # import the signing key first so the checksum signature is produced with it
+      - name: import signing key
+        if: ${{ secrets.RELEASE_GPG_KEY != '' }}
+        env:
+          RELEASE_GPG_KEY: ${{ secrets.RELEASE_GPG_KEY }}
+        run: echo "$RELEASE_GPG_KEY" | gpg --batch --import
+      - name: checksums + sign
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: bash scripts/sign-artifacts.sh dist/release
+      - name: SBOM
+        run: bash scripts/gen-sbom.sh dist/release
       - name: release-gate
-        run: bash scripts/release-gate.sh
+        run: bash scripts/release-gate.sh dist/release
 
-      # Publish the slopgate npm package (linux amd64 only; requires NPM_TOKEN secret).
+      # registry container -> GHCR (uses the default GITHUB_TOKEN; packages: write granted above)
+      - name: login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build + push registry container
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/skillhub-registry/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/agent-ecosystem/skillhub-registry:v0.1.0
+            ghcr.io/${{ github.repository_owner }}/agent-ecosystem/skillhub-registry:latest
+
+      # npm publish of slopgate (only if NPM_TOKEN secret is configured)
       - name: publish slopgate to npm
-        if: matrix.target == 'x86_64-unknown-linux-gnu' && env.NPM_TOKEN != ''
+        if: ${{ secrets.NPM_TOKEN != '' }}
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd apps/slopgate
+          npm pack --dry-run
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           npm publish --access public
 
@@ -102,6 +175,4 @@ jobs:
         with:
           files: |
             dist/release/*
-            dist/release/SHA256SUMS
-            dist/release/SHA256SUMS.sig
           generate_release_notes: true

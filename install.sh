@@ -9,7 +9,7 @@ set -uo pipefail
 CLI="${1:-skillhub}"            # skillhub | deskagent
 VERSION="${VERSION:-latest}"    # latest | v0.1.0
 PREFIX="${PREFIX:-$HOME/.local}"
-REPO="${REPO:-agent-ecosystem}"
+REPO="${REPO:-MerverliPy/agent-ecosystem}"
 GH="${GH:-https://github.com/$REPO/releases}"
 API="${API:-https://api.github.com/repos/$REPO/releases}"
 BIN_DIR="${PREFIX}/bin"

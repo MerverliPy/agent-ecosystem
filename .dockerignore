@@ -1,0 +1,24 @@
+# Root build-context ignore for the registry container (the workflow builds with context `.`).
+# The Dockerfile needs apps/skillhub-registry/{src,Cargo.toml} and shared/schemas; everything
+# else — build caches, runtime DBs, secrets, keys, docs, and repo tooling — stays out.
+.git
+.github
+**/target
+**/node_modules
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.env
+**/*.key
+**/plan.key
+scripts
+records
+dist
+docs
+*.md
+hooks
+data
+deploy
+CHANGELOG.md
+VERSION
+LICENSE
