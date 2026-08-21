@@ -115,6 +115,13 @@ jobs:
           path: dist/release
           pattern: release-*
           merge-multiple: true
+      - name: npm ci (web apps)
+        run: |
+          set -e
+          for d in bench-site skillhub-web slopgate-dash; do
+            echo "== npm ci apps/$d =="
+            (cd "apps/$d" && npm ci --no-audit --no-fund)
+          done
       - name: build web static dists
         run: bash scripts/build-web-dist.sh
       - name: assemble web + action into release
