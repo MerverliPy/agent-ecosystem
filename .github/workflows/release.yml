@@ -191,7 +191,10 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           npm publish --access public
 
+      # create/attach the GitHub Release ONLY on tag-triggered runs; branch workflow_dispatch
+      # runs (the CI dry-run) stop here after the gate + container push.
       - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
         with:
           files: |
             dist/release/*
