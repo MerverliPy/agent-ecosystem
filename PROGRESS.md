@@ -963,3 +963,8 @@ Mirrored tasks:
 ## Release follow-up — .deb/.rpm done; npm blocked by 2FA (2026-08-21)
 - **Native .deb/.rpm installers**: added `scripts/build-native-installers.sh` (dpkg-deb + rpmbuild from linux-amd64 binaries) wired into the publish job (installs `rpm`). Validated locally (.deb builds + structure verified) and in CI (run 32468476981 "build native installers (.deb/.rpm)" success). They ship in the next tag release.
 - **npm publish**: `NPM_TOKEN` set, token authenticates, but the npm account requires a **2FA one-time password** to publish (`EOTP`). The provided token is not an npm "Automation" token, so it cannot bypass 2FA in CI. Blocked until the owner provides an npm **Automation** token (or a live OTP).
+
+## npm publish COMPLETE — @merverli/slopgate live (2026-08-21)
+- Scoped package **`@merverli/slopgate@0.1.0`** is public on npm (MIT, bin `slop`). Unscoped `slopgate` is rejected by npm as too similar to existing `slop-gate`, so the scoped name is used.
+- Automation token set as `NPM_TOKEN`; the publish step is tolerant of an existing version and forces public access. Run 32493046752 success.
+- .deb/.rpm native installers also validated in CI (shipping with the next tag release).

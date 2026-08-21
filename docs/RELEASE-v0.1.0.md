@@ -86,9 +86,8 @@ See `deploy/` (docker-compose + Caddy TLS + systemd unit) for deployment.
 
 ## Known limitations / deferred
 
-- **npm publish**: `slopgate` is published under the scoped name **`@merverli/slopgate`** (npm
-  rejects the unscoped `slopgate` as too similar to the existing `slop-gate`). Uses an npm
-  Automation token; a publishable tarball is also attached to this release.
+- **npm publish**: published as **`@merverli/slopgate`** (unscoped `slopgate` is rejected as too
+  similar to the existing `slop-gate`). `npm install @merverli/slopgate` — MIT, bin `slop`.
 - **`.deb`/`.rpm`** installers require `cargo dist init` in the two Rust workspaces
   (documented); the shell/Homebrew installers and per-target tarballs are provided now.
 - macOS installers via cargo-dist are produced on macOS runners in a follow-up.
