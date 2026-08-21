@@ -150,6 +150,11 @@ jobs:
           find apps -path '*/target/distrib/*' -type f \
             \( -name '*-installer.sh' -o -name '*.rb' -o -name '*-x86_64-unknown-linux-gnu.tar.xz' -o -name '*.tar.xz.sha256' \) \
             -exec cp -f {} dist/release/ \; 2>/dev/null || true
+      # native .deb/.rpm packages for the linux-amd64 CLIs (cargo-dist does not emit these)
+      - name: install rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: build native installers (.deb/.rpm)
+        run: bash scripts/build-native-installers.sh dist/release
       # import the signing key first so the checksum signature is produced with it
       - name: import signing key
         if: env.RELEASE_GPG_KEY != ''
