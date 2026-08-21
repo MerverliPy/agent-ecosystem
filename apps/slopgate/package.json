@@ -1,5 +1,5 @@
 {
-  "name": "slopgate",
+  "name": "@merverli/slopgate",
   "version": "0.1.0",
   "type": "module",
   "description": "SlopGate — deterministic rule pack + scorer for AI-slop code, prose, commits and PR text",
