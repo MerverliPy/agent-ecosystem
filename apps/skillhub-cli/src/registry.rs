@@ -77,6 +77,14 @@ impl Client {
         Ok((owner_out, token))
     }
 
+    /// Revoke a capability token by presenting it (self-revocation).
+    pub fn revoke_token(&self, token: &str) -> anyhow::Result<u16> {
+        let url = format!("{}/api/owners/revoke", self.base);
+        let body = serde_json::json!({ "token": token });
+        let resp = ureq::post(&url).send_json(&body)?;
+        Ok(resp.status())
+    }
+
     /// Publish a package. Requires a capability token for the owning namespace.
     pub fn publish(&self, payload: &serde_json::Value, token: Option<&str>) -> anyhow::Result<u16> {
         let url = format!("{}/api/publish", self.base);

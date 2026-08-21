@@ -65,6 +65,11 @@ enum Command {
         /// Owner namespace to register (lowercase, matches [a-z0-9][a-z0-9-]*)
         owner: String,
     },
+    /// Revoke a capability token (pass the token string as an argument)
+    Revoke {
+        /// The token to revoke
+        token: String,
+    },
     /// Publish a local skill directory to the registry (runs the scanner first)
     Publish {
         /// Path to skillhub.json
@@ -91,6 +96,7 @@ fn main() -> anyhow::Result<()> {
         Command::Scan { dir } => cmd_scan(Path::new(dir)),
         Command::Harnesses => cmd_harnesses(),
         Command::Register { owner } => cmd_register(&client, owner),
+        Command::Revoke { token } => cmd_revoke(&client, token),
         Command::Publish { manifest, files_dir, token } => cmd_publish(&client, manifest, Path::new(files_dir), token.as_deref()),
     }
 }
@@ -373,6 +379,15 @@ fn cmd_harnesses() -> anyhow::Result<()> {
     }
     for h in det {
         println!("{}  {}", h.id, h.dir.display());
+    }
+    Ok(())
+}
+
+fn cmd_revoke(client: &registry::Client, token: &str) -> anyhow::Result<()> {
+    match client.revoke_token(token)? {
+        200 => println!("token revoked"),
+        401 => println!("ERROR: token invalid or expired"),
+        other => println!("ERROR: registry returned HTTP {}", other),
     }
     Ok(())
 }

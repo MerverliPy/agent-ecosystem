@@ -16,7 +16,7 @@
 // canonical `owner/name` model. No migration code ships — `init()` creates the schema fresh.
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -115,14 +115,48 @@ fn constant_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// Mint a scoped capability token for an owner. Default expiry 30 days.
-fn mint_token(secret: &[u8], owner: &str, scope: &str) -> String {
-    let claims = serde_json::json!({
-        "sub": owner, "scope": scope, "jti": random_hex(), "exp": now_epoch() + 86400 * 30
+/// Returns the token string and its claims (the caller records the jti for revocation).
+fn mint_token(secret: &[u8], owner: &str, scope: &str) -> (String, Claims) {
+    let claims = Claims {
+        sub: owner.to_string(),
+        scope: scope.to_string(),
+        jti: random_hex(),
+        exp: now_epoch() + 86400 * 30,
+    };
+    let encoded = serde_json::json!({
+        "sub": claims.sub, "scope": claims.scope, "jti": claims.jti, "exp": claims.exp
     })
     .to_string();
-    let enc = b64url(claims.as_bytes());
+    let enc = b64url(encoded.as_bytes());
     let sig = hmac_hex(secret, enc.as_bytes());
-    format!("{enc}.{sig}")
+    (format!("{enc}.{sig}"), claims)
+}
+
+/// Persist a minted capability so it can be revoked later.
+fn record_capability(conn: &Connection, claims: &Claims) -> anyhow::Result<()> {
+    conn.execute(
+        "INSERT INTO capabilities (jti, owner, scope, expires_at, revoked)
+         VALUES (?1, ?2, ?3, ?4, 0)",
+        rusqlite::params![claims.jti, claims.sub, claims.scope, claims.exp],
+    )?;
+    Ok(())
+}
+
+/// True if the token's jti has been explicitly revoked.
+fn is_revoked(conn: &Connection, jti: &str) -> bool {
+    conn.query_row(
+        "SELECT revoked FROM capabilities WHERE jti = ?1",
+        [jti],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|r| r != 0)
+    .unwrap_or(false) // unknown jti is treated as not-revoked (self-contained token)
+}
+
+/// Revoke a capability token by jti.
+fn revoke_capability(conn: &Connection, jti: &str) -> anyhow::Result<u16> {
+    let n = conn.execute("UPDATE capabilities SET revoked = 1 WHERE jti = ?1", [jti])?;
+    Ok(if n == 0 { 404 } else { 200 })
 }
 
 /// Verify a token's signature + expiry; returns its claims, or None if invalid.
@@ -191,6 +225,13 @@ fn init(conn: &Connection) -> anyhow::Result<()> {
         CREATE TABLE IF NOT EXISTS owners (
             owner TEXT PRIMARY KEY,
             created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS capabilities (
+            jti TEXT PRIMARY KEY,
+            owner TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0
         );",
     )?;
     Ok(())
@@ -468,8 +509,32 @@ async fn register_owner(State(state): State<AppState>, Json(payload): Json<Regis
     ) {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
     }
-    let token = mint_token(&state.secret, &payload.owner, &format!("publish:{}", payload.owner));
+    let (token, claims) = mint_token(&state.secret, &payload.owner, &format!("publish:{}", payload.owner));
+    if let Err(e) = record_capability(&db, &claims) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+    }
     (StatusCode::CREATED, Json(serde_json::json!({"owner": payload.owner, "token": token}))).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct RevokeReq {
+    token: String,
+}
+
+/// Revoke a capability token by presenting it (self-revocation). The token's jti is marked
+/// revoked; any further publish with it is rejected.
+async fn revoke_token(State(state): State<AppState>, Json(payload): Json<RevokeReq>) -> impl IntoResponse {
+    let claims = match verify_token(&state.secret, &payload.token) {
+        Some(c) => c,
+        None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid or expired token"}))).into_response(),
+    };
+    let db = state.db.lock().unwrap();
+    match revoke_capability(&db, &claims.jti) {
+        Ok(200) => (StatusCode::OK, Json(serde_json::json!({"status": "revoked"}))).into_response(),
+        Ok(404) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "token not on record"}))).into_response(),
+        Ok(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "unexpected"}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+    }
 }
 
 async fn publish(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<PublishPayload>) -> impl IntoResponse {
@@ -482,6 +547,13 @@ async fn publish(State(state): State<AppState>, headers: HeaderMap, Json(payload
         Some(c) => c,
         None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid or expired token"}))).into_response(),
     };
+    // revocable: reject tokens whose jti has been revoked
+    {
+        let db = state.db.lock().unwrap();
+        if is_revoked(&db, &claims.jti) {
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "token has been revoked"}))).into_response();
+        }
+    }
     // authorize: the token must carry the publish scope for its owner
     if claims.scope != format!("publish:{}", claims.sub) {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "token does not grant publish scope"}))).into_response();
@@ -519,6 +591,7 @@ fn build_app(state: AppState) -> Router {
         .route("/api/packages/{owner}/{name}", get(pkg_detail))
         .route("/api/packages/{owner}/{name}/{version}/files", get(pkg_files))
         .route("/api/owners/register", post(register_owner))
+        .route("/api/owners/revoke", post(revoke_token))
         .route("/api/publish", post(publish))
         .with_state(state)
 }
@@ -709,7 +782,7 @@ mod tests {
     #[tokio::test]
     async fn http_publish_then_reads_via_canonical_id() {
         let app = build_app(test_state());
-        let token = mint_token(&test_secret(), "demo", "publish:demo");
+        let (token, _) = mint_token(&test_secret(), "demo", "publish:demo");
         // publish valid owner/name with the owner's token -> 201
         let (s, _) = post_json(&app, "/api/publish", &publish_body(), Some(&token)).await;
         assert_eq!(s, StatusCode::CREATED);
@@ -732,7 +805,7 @@ mod tests {
         let (s, _) = post_json(&app, "/api/publish", &publish_body(), Some("not-a-real-token")).await;
         assert_eq!(s, StatusCode::UNAUTHORIZED);
         // token signed with a different secret -> 401
-        let forged = mint_token(b"different-secret", "demo", "publish:demo");
+        let (forged, _) = mint_token(b"different-secret", "demo", "publish:demo");
         let (s, _) = post_json(&app, "/api/publish", &publish_body(), Some(&forged)).await;
         assert_eq!(s, StatusCode::UNAUTHORIZED);
     }
@@ -741,7 +814,7 @@ mod tests {
     async fn http_publish_forbidden_for_other_owner() {
         let app = build_app(test_state());
         // a valid token for owner 'attacker' cannot publish under demo/* -> 403
-        let token = mint_token(&test_secret(), "attacker", "publish:attacker");
+        let (token, _) = mint_token(&test_secret(), "attacker", "publish:attacker");
         let (s, body) = post_json(&app, "/api/publish", &publish_body(), Some(&token)).await;
         assert_eq!(s, StatusCode::FORBIDDEN);
         assert!(body.contains("cannot publish"));
@@ -751,9 +824,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn http_token_revocation_end_to_end() {
+        let app = build_app(test_state());
+        // register owner -> minted + recorded capability
+        let (s, body) = post_json(&app, "/api/owners/register", r#"{"owner":"rev"}"#, None).await;
+        assert_eq!(s, StatusCode::CREATED);
+        let token = serde_json::from_str::<serde_json::Value>(&body).unwrap()["token"]
+            .as_str().unwrap().to_string();
+        // publish succeeds with the recorded token
+        let publish_rev = serde_json::json!({
+            "manifest": {"name": "rev/pkg", "version": "1.0.0", "description": "revocable",
+                         "license": "MIT", "repo": "x", "harnesses": ["pi"]},
+            "files": {"SKILL.md": "# r"},
+            "scan": {"verified": true}
+        }).to_string();
+        let (s, _) = post_json(&app, "/api/publish", &publish_rev, Some(&token)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        // revoke the token
+        let (s, body) = post_json(&app, "/api/owners/revoke", &serde_json::json!({"token": token}).to_string(), None).await;
+        assert_eq!(s, StatusCode::OK);
+        assert!(body.contains("revoked"));
+        // publish with the revoked token is now rejected
+        let (s, _) = post_json(&app, "/api/publish", &publish_rev, Some(&token)).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+        // reads remain anonymous after revocation
+        let (s, _) = get(&app, "/api/packages/rev/pkg").await;
+        assert_eq!(s, StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn http_publish_rejects_non_canonical_grammar() {
         let app = build_app(test_state());
-        let token = mint_token(&test_secret(), "demo", "publish:demo");
+        let (token, _) = mint_token(&test_secret(), "demo", "publish:demo");
         for bad in ["no_slash", "A/b", "a/b/c", "demo/under_score"] {
             let body = serde_json::json!({
                 "manifest": {"name": bad, "version": "1.0.0", "description": "bad",

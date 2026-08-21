@@ -815,3 +815,9 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 11/11 — +2); cargo build + cargo test CLI (exit 0, 9/9); demo skillhub-install-demo.sh (exit 0, publishes verified demo/hello-skill v1.0.0, installs + verifies)
 - EXIT CODES: verify 0; registry test 0; CLI build 0; CLI test 0; demo 0
 - Lock verify: PASS
+
+### Task done: Auth for publish via scoped, revocable capability tokens
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (capabilities table; mint_token returns claims; record_capability on register; is_revoked/revoke_capability; publish checks revocation → 401; /api/owners/revoke self-revocation endpoint; +http_token_revocation_end_to_end test; removed unused HeaderValue import); apps/skillhub-cli/src/main.rs (+Revoke cmd, cmd_revoke); apps/skillhub-cli/src/registry.rs (+revoke_token); PHASES.md checkbox
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 12/12 — +1); cargo build + cargo test CLI (exit 0, 9/9, pre-existing warnings)
+- EXIT CODES: verify 0; registry test 0; CLI build 0; CLI test 0
+- Lock verify: PASS
