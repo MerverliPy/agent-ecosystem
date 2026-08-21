@@ -839,3 +839,9 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 23/23 — +3); cargo build registry (exit 0, 0 warnings); cargo test CLI (exit 0, 9/9); demo skillhub-install-demo.sh (exit 0, signature-verified publish)
 - EXIT CODES: verify 0; registry test 0; registry build 0; CLI test 0; demo 0
 - Lock verify: PASS
+
+### Task done: Transport/runtime hardening (TLS guidance, bind policy, structured non-leaking errors, default-deny)
+- FILES CHANGED: apps/skillhub-registry/src/main.rs (internal_err() helper logs detail to stderr, returns generic {"error":"internal error"}; replaced all e.to_string() leakages in handlers; SKILLHUB_REGISTRY_BIND env with loopback-only default + bind-policy comment; +http_default_deny_unknown_routes, +internal_error_does_not_leak_details); apps/skillhub-registry/README.md (Configuration + Security + TLS termination sections)
+- VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 25/25 — +2); cargo build registry (exit 0)
+- EXIT CODES: verify 0; registry test 0; build 0
+- Lock verify: PASS

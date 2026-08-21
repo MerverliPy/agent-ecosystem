@@ -532,6 +532,14 @@ fn bump_downloads(conn: &Connection, name: &str) -> anyhow::Result<()> {
 
 // ---------- HTTP handlers ----------
 
+// ---------- transport/runtime hardening ----------
+// Structured, non-leaking errors: internal failure details go to the server log only; clients
+// receive a generic `{"error":"internal error"}` (default-deny: no stack traces, no internals).
+fn internal_err(e: impl std::fmt::Display) -> axum::response::Response {
+    eprintln!("[skillhub-registry] internal error: {e}");
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"}))).into_response()
+}
+
 async fn health() -> &'static str {
     "ok"
 }
@@ -546,7 +554,7 @@ async fn search(State(state): State<AppState>, Query(q): Query<SearchQuery>) -> 
     let db = state.db.lock().unwrap();
     match search_db(&db, &q) {
         Ok(items) => (StatusCode::OK, Json(items)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => internal_err(e),
     }
 }
 
@@ -559,7 +567,7 @@ async fn pkg_detail(State(state): State<AppState>, Path((owner, name)): Path<(St
     match detail_db(&db, &full) {
         Ok(Some(d)) => (StatusCode::OK, Json(d)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "not found"}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => internal_err(e),
     }
 }
 
@@ -575,7 +583,7 @@ async fn pkg_files(State(state): State<AppState>, Path((owner, name, version)): 
             (StatusCode::OK, Json(serde_json::json!({"files": files}))).into_response()
         }
         Ok(None) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "package or version not found"}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => internal_err(e),
     }
 }
 
@@ -690,11 +698,11 @@ async fn register_owner(State(state): State<AppState>, Json(payload): Json<Regis
         "INSERT OR REPLACE INTO owners (owner, pubkey, revoked, created_at) VALUES (?1, ?2, 0, ?3)",
         rusqlite::params![payload.owner, pubkey, now_iso()],
     ) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+        return internal_err(e);
     }
     let (token, claims) = mint_token(&state.secret, &payload.owner, &format!("publish:{}", payload.owner));
     if let Err(e) = record_capability(&db, &claims) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+        return internal_err(e);
     }
     (StatusCode::CREATED, Json(serde_json::json!({
         "owner": payload.owner, "token": token,
@@ -721,7 +729,7 @@ async fn rotate_owner_key(State(state): State<AppState>, Json(payload): Json<Rot
     let keypair = owner_keypair();
     let pubkey = pubkey_b64(&keypair);
     if let Err(e) = db.execute("UPDATE owners SET pubkey = ?2 WHERE owner = ?1", rusqlite::params![claims.sub, pubkey]) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+        return internal_err(e);
     }
     (StatusCode::OK, Json(serde_json::json!({
         "owner": claims.sub, "pubkey": pubkey, "signing_key": signing_key_b64(&keypair),
@@ -736,7 +744,7 @@ async fn revoke_owner(State(state): State<AppState>, Json(payload): Json<RotateR
     };
     let db = state.db.lock().unwrap();
     if let Err(e) = db.execute("UPDATE owners SET revoked = 1 WHERE owner = ?1", [&claims.sub]) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+        return internal_err(e);
     }
     let _ = db.execute("UPDATE capabilities SET revoked = 1 WHERE owner = ?1", [&claims.sub]);
     (StatusCode::OK, Json(serde_json::json!({"status": "owner revoked", "owner": claims.sub}))).into_response()
@@ -759,7 +767,7 @@ async fn revoke_token(State(state): State<AppState>, Json(payload): Json<RevokeR
         Ok(200) => (StatusCode::OK, Json(serde_json::json!({"status": "revoked"}))).into_response(),
         Ok(404) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "token not on record"}))).into_response(),
         Ok(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "unexpected"}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => internal_err(e),
     }
 }
 
@@ -825,7 +833,7 @@ async fn publish(State(state): State<AppState>, headers: HeaderMap, Json(payload
         Ok(409) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": "version already exists (immutable)"}))).into_response(),
         Ok(400) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid manifest or package (schema, size, or path constraints)"}))).into_response(),
         Ok(other) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("unexpected status {other}")}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => internal_err(e),
     }
 }
 
@@ -901,7 +909,11 @@ async fn main() -> anyhow::Result<()> {
 
     let app = build_app(state);
 
-    let addr = format!("127.0.0.1:{port}");
+    // Bind-address policy: default is loopback-only. Exposing 0.0.0.0 is only safe behind a
+    // TLS-terminating reverse proxy (see README Security / TLS guidance). Never expose plaintext
+    // auth/publish endpoints directly to the public internet.
+    let bind = std::env::var("SKILLHUB_REGISTRY_BIND").unwrap_or_else(|_| "127.0.0.1".into());
+    let addr = format!("{bind}:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     println!("skillhub-registry listening on http://{addr} (db: {db_path})");
     axum::serve(listener, app).await?;
@@ -1407,5 +1419,30 @@ mod tests {
         // valid grammar but unknown package -> 404, not 400
         let (s, _) = get(&app, "/api/packages/valid/unknown").await;
         assert_eq!(s, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn http_default_deny_unknown_routes() {
+        let app = build_app(test_state());
+        // unknown path -> 404 (default-deny posture)
+        let (s, _) = get(&app, "/api/does/not/exist").await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+        let (s, _) = get(&app, "/debug").await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+        // wrong method on a known route -> 405
+        let (s, _) = get(&app, "/api/publish").await;
+        assert_eq!(s, StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn internal_error_does_not_leak_details() {
+        let resp = internal_err("failed: /var/lib/skillhub.db /some/secret/path");
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+        let text = String::from_utf8_lossy(&body).to_string();
+        assert!(text.contains("internal error"));
+        assert!(!text.contains("skillhub.db"));
+        assert!(!text.contains("/some/secret/path"));
+        assert!(text.starts_with('{')); // structured JSON
     }
 }
