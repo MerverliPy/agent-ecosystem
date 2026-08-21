@@ -13,7 +13,7 @@ require human review) > `PROGRESS.md` (yes — the only free-form channel) > `RE
   task & phase (must exit 0); `propose "<reason>"` is the ONLY plan-change channel;
   `init`/`approve` are humans-only (git hooks call `check-staged`/`check-push` internally).
 - **Env:** `bash scripts/verify-env.sh` — must print `ENV-OK`.
-- **Validate:** `bash scripts/run-all-checks.sh` — 20 checks, must print `RUN-ALL-CHECKS-OK`;
+- **Validate:** `bash scripts/run-all-checks.sh` — 21 checks, must print `RUN-ALL-CHECKS-OK`;
   authoritative per-product suite (bench-site, slopgate-action, slopgate-dash, skillhub-web,
   skillhub-cli/registry, deskagent, deskagent-cli) — mirror its exact commands.
 - **Root tests:** `npm test`. **Hooks:** `hooks/install-hooks.sh` (never bypass). **Demos:**
