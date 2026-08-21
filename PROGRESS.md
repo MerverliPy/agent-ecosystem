@@ -851,3 +851,10 @@ Mirrored tasks:
 - VALIDATIONS RUN: plan-lock verify (exit 0); cargo test registry (exit 0, 27/27 — +2); cargo test CLI (exit 0, 9/9); demo skillhub-install-demo.sh (exit 0, verified package readable, not quarantined)
 - EXIT CODES: verify 0; registry test 0; CLI test 0; demo 0
 - Lock verify: PASS
+
+### Task done: Artifact hygiene guard (DBs, seed tokens, signing secrets out of git/artifacts)
+- FILES CHANGED: scripts/check-artifact-hygiene.sh (new: asserts no `*.db/.env/*.key/*plan.key` git-tracked; any present must be git-ignored [no-build-step-copies guard]; no private-key material in tracked source [excludes SEC-06 scanner rule in scan.rs]; no hardcoded SKILLHUB_REGISTRY_SECRET/SIGNING_KEY literals); scripts/run-all-checks.sh (wired hygiene guard as 21st check); README.md (20 -> 21 checks)
+- VALIDATIONS RUN: plan-lock verify (exit 0); bash scripts/check-artifact-hygiene.sh (exit 0, ARTIFACT-HYGIENE-OK); bash scripts/run-all-checks.sh (exit 0, passed 21 / failed 0, RUN-ALL-CHECKS-OK)
+- EXIT CODES: verify 0; hygiene 0; run-all-checks 0
+- Lock verify: PASS
+- NOTE: AGENTS.md still says "20 checks" — updating it needs human review per the source-of-truth hierarchy (agents must not edit AGENTS.md); flag for human approval. Historical "20/20" refs in records/ are left as history.

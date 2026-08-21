@@ -25,6 +25,7 @@ run()   { # run <label> <cmd...>
 }
 
 echo "== shared =="
+run "artifact hygiene guard"                 bash "$ROOT/scripts/check-artifact-hygiene.sh"
 run "memory-event schema tests"             node --test "$ROOT/shared/schemas/test/memory-event.test.mjs"
 run "benchmark dataset validation"          node "$ROOT/shared/datasets/validate-dataset.mjs"
 run "will-it-run calculator tests"          node --test "$ROOT/shared/lib/test/will-it-run.test.mjs"

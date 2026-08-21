@@ -10,7 +10,7 @@ A monorepo building four interoperable products around the agent/AI ecosystem, d
 New to the repo? Three ways in:
 
 - **Pick a product** — see the [product map](#products) below and open its directory.
-- **Run all checks** — `bash scripts/run-all-checks.sh` (20 checks, one exit code; the CI surrogate).
+- **Run all checks** — `bash scripts/run-all-checks.sh` (21 checks, one exit code; the CI surrogate).
 - **See it work** — run a [demo](#demos); every demo is offline and end-to-end.
 
 Full plan and locked constraints: [`PHASES.md`](PHASES.md). Execution status and change requests: [`PROGRESS.md`](PROGRESS.md). Per-phase handoff records: [`records/`](records/).

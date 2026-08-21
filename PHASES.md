@@ -165,7 +165,7 @@ DeskAgent last: heaviest, consumes BenchKit data (model picker) and SkillHub spe
 - [x] Add publish integrity: package signing verified against a registry CA that issues per-owner keys; owner key rollover/revocation support.
 - [x] Harden transport/runtime: TLS termination guidance, bind-address policy, structured errors with no internal detail leakage, default-deny posture.
 - [x] Add abuse/DoS controls: max DB size, quarantine of unverified/`high_risk` packages behind explicit opt-in, batch download-count writes.
-- [ ] Enforce artifact hygiene: runtime DB (`*.db`), seed tokens, and signing secrets stay out of git and out of any container image; add a guard so no build step copies them into a release artifact.
+- [x] Enforce artifact hygiene: runtime DB (`*.db`), seed tokens, and signing secrets stay out of git and out of any container image; add a guard so no build step copies them into a release artifact.
 - [ ] Add an adversarial security test suite (path traversal, oversized, bad semver, unauthorized, signature mismatch) and keep the existing registry unit tests green.
 - **Exit criteria:** unauthenticated publish is rejected; unauthorized owner publish is rejected; malicious fixtures fail validation; verified packages remain anonymously readable; all adversarial + existing tests green.
 
