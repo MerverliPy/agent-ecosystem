@@ -117,17 +117,21 @@ jobs:
           tar -czf dist/release/slopgate-action.tar.gz -C /tmp/action .
       # optional cargo-dist installers (.deb/.rpm/homebrew) — best effort; requires prior
       # `cargo dist init`. If not initialized, installers are omitted (does not fail the gate).
-      # .deb/.rpm/homebrew installers via cargo-dist. PREREQUISITE: run `cargo dist init`
-      # in apps/skillhub-cli and apps/deskagent (generates dist-manifest + CI) and commit it.
-      # Until then this is best-effort and produces nothing; it does not fail the gate.
-      - name: cargo-dist installers (best effort)
+      # Native installers (install.sh + Homebrew formula + tar.xz + checksums) for linux amd64,
+      # produced by cargo-dist for the publish host. `allow-dirty=["ci"]` in each workspace lets
+      # cargo-dist build without owning this workflow. Best-effort; the gate does not require it.
+      - name: cargo-dist installers (linux amd64)
         continue-on-error: true
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           cargo install cargo-dist --locked >/dev/null 2>&1 || true
           for w in skillhub-cli deskagent; do
-            (cd "apps/$w" && cargo dist build --artifacts=all) >/dev/null 2>&1 || true
+            (cd "apps/$w" && dist build --target x86_64-unknown-linux-gnu --artifacts=all) >/dev/null 2>&1 || true
           done
-          find apps -path '*/target/distrib/*' -type f -exec cp -f {} dist/release/ \; 2>/dev/null || true
+          # copy per-app installers (skip shared source.tar.gz / sha256.sum collisions)
+          find apps -path '*/target/distrib/*' -type f \
+            \( -name '*-installer.sh' -o -name '*.rb' -o -name '*-x86_64-unknown-linux-gnu.tar.xz' -o -name '*.tar.xz.sha256' \) \
+            -exec cp -f {} dist/release/ \; 2>/dev/null || true
       # import the signing key first so the checksum signature is produced with it
       - name: import signing key
         if: ${{ secrets.RELEASE_GPG_KEY != '' }}

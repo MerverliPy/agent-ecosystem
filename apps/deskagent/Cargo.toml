@@ -10,8 +10,23 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
-# cargo-dist installers for the `deskagent` CLI (Tauri GUI excluded/deferred)
+# Config for 'dist'
 [workspace.metadata.dist]
-cargo-dist-version = "0.28.0"
-installers = ["shell", "homebrew", "cargo"]
-targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin"]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# The installers to generate for each app
+installers = ["shell", "homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# CI backends to support
+ci = "github"
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
+allow-dirty = ["ci"]
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

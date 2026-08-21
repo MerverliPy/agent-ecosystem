@@ -2,6 +2,7 @@
 name = "deskagent-cli"
 version.workspace = true
 edition.workspace = true
+repository = "https://github.com/MerverliPy/agent-ecosystem"
 license.workspace = true
 description = "DeskAgent CLI — ratatui terminal UI over the deskagent-core memory system. Four panes mirroring the web tabs (Chat / Memory+Approvals / Models / Tasks) plus headless commands; reuses the core with zero business-logic changes."
 

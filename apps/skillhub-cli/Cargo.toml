@@ -3,6 +3,7 @@ name = "skillhub-cli"
 version = "0.1.0"
 edition = "2021"
 description = "SkillHub — cross-harness skill package manager CLI"
+repository = "https://github.com/MerverliPy/agent-ecosystem"
 license = "MIT"
 
 [[bin]]
@@ -25,8 +26,23 @@ base64 = "0.22"
 lto = true
 strip = true
 
-# cargo-dist installers (produces install.sh/Homebrew; .deb/.rpm via the release pipeline)
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# Config for 'dist'
 [workspace.metadata.dist]
-cargo-dist-version = "0.28.0"
-installers = ["shell", "homebrew", "cargo"]
-targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin"]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# The installers to generate for each app
+installers = ["shell", "homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# CI backends to support
+ci = "github"
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
+allow-dirty = ["ci"]

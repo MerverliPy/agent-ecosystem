@@ -2,6 +2,7 @@
 name = "deskagent"
 version.workspace = true
 edition.workspace = true
+repository = "https://github.com/MerverliPy/agent-ecosystem"
 license.workspace = true
 description = "DeskAgent — Tauri 2 shell over the deskagent-core memory system"
 
