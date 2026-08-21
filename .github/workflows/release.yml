@@ -195,6 +195,8 @@ jobs:
           npm pack --dry-run
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           npm publish --access public
+          # scoped packages can end up private; force public access explicitly
+          npm access public "@merverli/slopgate" 2>/dev/null || true
 
       # create/attach the GitHub Release ONLY on tag-triggered runs; branch workflow_dispatch
       # runs (the CI dry-run) stop here after the gate + container push.
