@@ -93,6 +93,12 @@ jobs:
     name: publish
     runs-on: ubuntu-22.04
     needs: [checks, build]
+    # job-level env makes the secrets visible to step `if:` conditions (secrets aren't allowed
+    # directly in step `if`). Empty when a secret is not configured -> the gated step is skipped.
+    env:
+      RELEASE_GPG_KEY: ${{ secrets.RELEASE_GPG_KEY }}
+      GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -134,13 +140,9 @@ jobs:
             -exec cp -f {} dist/release/ \; 2>/dev/null || true
       # import the signing key first so the checksum signature is produced with it
       - name: import signing key
-        if: ${{ secrets.RELEASE_GPG_KEY != '' }}
-        env:
-          RELEASE_GPG_KEY: ${{ secrets.RELEASE_GPG_KEY }}
+        if: env.RELEASE_GPG_KEY != ''
         run: echo "$RELEASE_GPG_KEY" | gpg --batch --import
       - name: checksums + sign
-        env:
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
         run: bash scripts/sign-artifacts.sh dist/release
       - name: SBOM
         run: bash scripts/gen-sbom.sh dist/release
@@ -166,9 +168,7 @@ jobs:
 
       # npm publish of slopgate (only if NPM_TOKEN secret is configured)
       - name: publish slopgate to npm
-        if: ${{ secrets.NPM_TOKEN != '' }}
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: env.NPM_TOKEN != ''
         run: |
           cd apps/slopgate
           npm pack --dry-run
