@@ -19,8 +19,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # linux-arm64 cross linker (installed in the matrix step below)
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
   # Signing keys / provenance come from repository secrets, never committed.
   #   RELEASE_GPG_KEY  (optional) — armored signing key for artifact signatures
+  #   NPM_TOKEN        (required for `npm publish` of slopgate)
 
 jobs:
   release:
@@ -52,6 +55,11 @@ jobs:
       - name: run-all-checks
         run: bash scripts/run-all-checks.sh
 
+      # linux-arm64 needs a cross C compiler + linker to build Rust crates.
+      - name: install linux-arm64 cross linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
       # Build the Rust CLIs (skillhub + deskagent) for this target.
       - name: build skillhub
         run: |
@@ -60,10 +68,10 @@ jobs:
       - name: build deskagent-cli
         run: cargo build --release --manifest-path apps/deskagent/Cargo.toml -p deskagent-cli --target ${{ matrix.target }}
 
-      # Build the registry container + web static dists (linux host only).
+      # Build the registry container + web static dists (linux amd64 host only).
       - name: build registry container (linux amd64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: docker build -t skillhub-registry:latest apps/skillhub-registry
+        run: docker build -f apps/skillhub-registry/Dockerfile -t skillhub-registry:latest .
 
       - name: build web static dists
         run: bash scripts/build-web-dist.sh
@@ -79,6 +87,16 @@ jobs:
       # Release-only gate must pass before upload.
       - name: release-gate
         run: bash scripts/release-gate.sh
+
+      # Publish the slopgate npm package (linux amd64 only; requires NPM_TOKEN secret).
+      - name: publish slopgate to npm
+        if: matrix.target == 'x86_64-unknown-linux-gnu' && env.NPM_TOKEN != ''
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd apps/slopgate
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          npm publish --access public
 
       - uses: softprops/action-gh-release@v2
         with:
